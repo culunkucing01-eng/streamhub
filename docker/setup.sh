@@ -86,7 +86,7 @@ sleep 3
 
 # === STEP 4: Dapatkan sertifikat SSL ===
 info "Mendapatkan sertifikat SSL dari Let's Encrypt untuk $DOMAIN..."
-docker compose run --rm certbot certonly \
+docker compose run --rm --entrypoint certbot certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email admin@${DOMAIN} \
