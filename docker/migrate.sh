@@ -14,8 +14,6 @@ echo "  Email  : $EMAIL"
 echo "========================================"
 echo ""
 echo "PERINGATAN: Script ini akan MENGHAPUS Ant Media Server!"
-echo "Pastikan streaming sudah dipindahkan ke StreamHub sebelum lanjut."
-echo ""
 read -p "Ketik 'YA' untuk melanjutkan: " CONFIRM
 if [ "$CONFIRM" != "YA" ]; then
   echo "Dibatalkan."
@@ -26,72 +24,147 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo ""
-echo "=== [1/6] Menghentikan Ant Media Server ==="
-systemctl stop antmedia 2>/dev/null || true
-systemctl disable antmedia 2>/dev/null || true
-echo "Ant Media Server dihentikan."
+echo "=== [1/6] Menghentikan SEMUA layanan di port 80 dan 443 ==="
+
+# Hentikan semua service yang mungkin pakai port 80/443
+for SVC in antmedia nginx apache2 httpd lighttpd caddy; do
+  systemctl stop "$SVC" 2>/dev/null && echo "Stopped: $SVC" || true
+  systemctl disable "$SVC" 2>/dev/null || true
+done
+
+# Hentikan semua Docker container
+docker compose down 2>/dev/null || true
+docker stop $(docker ps -q) 2>/dev/null || true
+
+# Kill paksa semua proses di port 80 dan 443
+fuser -k 80/tcp 2>/dev/null || true
+fuser -k 443/tcp 2>/dev/null || true
+sleep 3
+
+# Verifikasi port 80 benar-benar kosong
+if ss -tuln | grep -q ' :80 \| :80$'; then
+  echo "ERROR: Port 80 masih digunakan!"
+  ss -tuln | grep ':80'
+  echo "Coba lagi paksa..."
+  fuser -k -9 80/tcp 2>/dev/null || true
+  sleep 2
+fi
+
+PORT80_STATUS=$(ss -tuln | grep ' :80' | wc -l)
+if [ "$PORT80_STATUS" -gt "0" ]; then
+  echo "GAGAL: Port 80 tidak bisa dikosongkan. Proses yang menggunakan:"
+  lsof -i :80 2>/dev/null || ss -tuln | grep ':80'
+  exit 1
+fi
+echo "Port 80 dan 443 KOSONG."
 
 echo ""
 echo "=== [2/6] Menghapus Ant Media Server ==="
-if [ -d /usr/local/antmedia ]; then
-  # Jalankan uninstall script jika ada
-  if [ -f /usr/local/antmedia/uninstall.sh ]; then
-    bash /usr/local/antmedia/uninstall.sh 2>/dev/null || true
+AMS_DIRS="/usr/local/antmedia /opt/antmedia /home/antmedia"
+for DIR in $AMS_DIRS; do
+  if [ -d "$DIR" ]; then
+    if [ -f "$DIR/uninstall.sh" ]; then
+      bash "$DIR/uninstall.sh" 2>/dev/null || true
+    fi
+    rm -rf "$DIR"
+    echo "Dihapus: $DIR"
   fi
-  rm -rf /usr/local/antmedia
-  echo "Ant Media Server dihapus dari /usr/local/antmedia."
-else
-  echo "Ant Media Server tidak ditemukan di /usr/local/antmedia, skip."
-fi
-
-# Hapus service file jika masih ada
-rm -f /etc/systemd/system/antmedia.service 2>/dev/null || true
+done
+rm -f /etc/systemd/system/antmedia*.service /lib/systemd/system/antmedia*.service 2>/dev/null || true
 systemctl daemon-reload 2>/dev/null || true
+echo "Ant Media Server dihapus."
 
 echo ""
-echo "=== [3/6] Membebaskan port 80 dan 443 ==="
-# Stop nginx host yang mungkin dipakai Ant Media
-systemctl stop nginx 2>/dev/null || true
-systemctl disable nginx 2>/dev/null || true
-
-# Stop container StreamHub yang lama
-docker compose down 2>/dev/null || true
-
-# Tunggu port 80 bebas
-sleep 3
-if ss -tuln | grep -q ':80 '; then
-  echo "WARNING: Port 80 masih digunakan oleh proses lain:"
-  ss -tuln | grep ':80 '
-  echo "Coba kill paksa..."
-  fuser -k 80/tcp 2>/dev/null || true
-  sleep 2
-fi
-echo "Port 80 dan 443 bebas."
-
-echo ""
-echo "=== [4/6] Mendapatkan SSL Certificate ==="
+echo "=== [3/6] Mendapatkan SSL Certificate ==="
 mkdir -p certbot/conf
 
 CERT_PATH="certbot/conf/live/${DOMAIN}/fullchain.pem"
 if [ -f "$CERT_PATH" ]; then
   echo "Certificate sudah ada, skip certbot."
 else
+  # Install certbot langsung di host (lebih reliable dari Docker)
+  if ! command -v certbot &>/dev/null; then
+    echo "Menginstall certbot..."
+    apt-get update -qq
+    apt-get install -y certbot
+  fi
+
   echo "Menjalankan certbot standalone..."
-  docker run --rm \
-    -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
-    -p 80:80 \
-    certbot/certbot certonly \
+  certbot certonly \
     --standalone \
+    --non-interactive \
+    --agree-tos \
     --email "${EMAIL}" \
-    --agree-tos --no-eff-email \
     -d "${DOMAIN}"
-  echo "SSL Certificate berhasil didapatkan!"
+
+  # Symlink ke folder certbot Docker
+  mkdir -p certbot/conf/live
+  ln -sf /etc/letsencrypt/live certbot/conf/live 2>/dev/null || true
+  ln -sf /etc/letsencrypt/archive certbot/conf/archive 2>/dev/null || true
+  ln -sf /etc/letsencrypt certbot/conf 2>/dev/null || true
+  echo "SSL Certificate berhasil!"
 fi
 
 echo ""
-echo "=== [5/6] Mengupdate konfigurasi nginx ke port 80/443 ==="
+echo "=== [4/6] Mengupdate nginx.conf ke HTTPS ==="
 
-# Update docker-compose.yml: kembalikan nginx ke port 80/443, hapus host network
+# Buat nginx-template.conf yang pakai /etc/letsencrypt langsung
+cat > nginx.conf <<NGINXEOF
+worker_processes auto;
+events { worker_connections 1024; }
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+    client_max_body_size 50m;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    upstream backend  { server backend:3001; }
+    upstream frontend { server frontend:80; }
+
+    server {
+        listen 80;
+        server_name ${DOMAIN};
+        location / { return 301 https://\$host\$request_uri; }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name ${DOMAIN};
+
+        ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        location /api/ {
+            proxy_pass http://backend;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+
+        location / {
+            proxy_pass http://frontend;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+    }
+}
+NGINXEOF
+
+echo "nginx.conf HTTPS siap."
+
+echo ""
+echo "=== [5/6] Update docker-compose.yml ==="
 cat > docker-compose.yml <<'COMPOSEOF'
 version: "3.8"
 
@@ -146,35 +219,19 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./certbot/conf:/etc/letsencrypt:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - frontend
       - backend
-
-  certbot:
-    image: certbot/certbot:latest
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 volumes:
   postgres_data:
 COMPOSEOF
 
-# Buat nginx.conf HTTPS
-sed "s/\${DOMAIN}/${DOMAIN}/g" nginx-template.conf > nginx.conf
-echo "nginx.conf HTTPS aktif."
-
 echo ""
-echo "=== [6/6] Menjalankan StreamHub di port 80/443 ==="
-
-# Update .env dengan FRONTEND_URL yang benar (HTTPS)
-if [ -f .env ]; then
-  sed -i 's|FRONTEND_URL=.*|FRONTEND_URL=https://'"${DOMAIN}"'|g' .env 2>/dev/null || true
-fi
-
+echo "=== [6/6] Menjalankan StreamHub ==="
 docker compose up -d
-sleep 15
+sleep 20
 
 echo ""
 echo "========================================"
@@ -182,5 +239,4 @@ echo "  Migrasi Selesai!"
 echo "  App  : https://${DOMAIN}"
 echo "  Admin: admin@streamhub.tv / admin123"
 echo "========================================"
-echo ""
 echo "PENTING: Segera ganti password admin setelah login!"
