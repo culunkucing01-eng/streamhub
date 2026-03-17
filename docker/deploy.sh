@@ -17,7 +17,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo "=== [1/7] Writing .env ==="
+echo "=== [1/6] Writing .env ==="
 cat > .env <<EOF
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
@@ -25,64 +25,49 @@ DOMAIN=${DOMAIN}
 NODE_ENV=production
 EOF
 
-echo "=== [2/7] Rebuilding images ==="
-docker compose pull postgres nginx certbot 2>/dev/null || true
+echo "=== [2/6] Rebuilding images ==="
 docker compose build --no-cache backend frontend
 
-echo "=== [3/7] Starting with HTTP-only nginx (no SSL yet) ==="
-cp nginx-http.conf nginx.conf
-
-# Stop all containers and remove postgres volume to fix password mismatch
+echo "=== [3/6] Starting services (HTTP only, no nginx yet) ==="
 docker compose down --remove-orphans --volumes 2>/dev/null || true
 docker volume rm docker_postgres_data 2>/dev/null || true
 
-docker compose up -d postgres backend frontend nginx
+# Start backend, frontend, postgres — but NOT nginx yet (certbot needs port 80)
+docker compose up -d postgres backend frontend
 
 echo "Waiting 45s for database init and backend migrations..."
 sleep 45
 
-echo "=== [4/7] Seeding database ==="
+echo "=== [4/6] Seeding database ==="
 docker compose exec backend node seed.cjs && echo "Seed OK" || echo "Seed skipped (may already be seeded)"
 
-echo "=== [5/7] Obtaining SSL certificate ==="
+echo "=== [5/6] Obtaining SSL certificate (standalone mode) ==="
+mkdir -p certbot/conf
+
 CERT_PATH="certbot/conf/live/${DOMAIN}/fullchain.pem"
 if [ -f "$CERT_PATH" ]; then
   echo "Certificate already exists, skipping certbot."
 else
-  mkdir -p certbot/www certbot/conf
-
-  # Verify nginx is serving the webroot correctly
-  mkdir -p certbot/www/.well-known/acme-challenge
-  echo "ok" > certbot/www/.well-known/acme-challenge/test
-  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${DOMAIN}/.well-known/acme-challenge/test" 2>/dev/null || echo "000")
-  rm -f certbot/www/.well-known/acme-challenge/test
-
-  if [ "$HTTP_STATUS" != "200" ]; then
-    echo "WARNING: nginx webroot test failed (HTTP $HTTP_STATUS). Certbot may fail."
-    echo "Check that port 80 is open and nginx is running."
-  else
-    echo "Nginx webroot OK (HTTP 200). Running certbot..."
-  fi
-
+  echo "Running certbot standalone on port 80..."
   docker run --rm \
-    -v "$(pwd)/certbot/www:/var/www/certbot" \
     -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
+    -p 80:80 \
     certbot/certbot certonly \
-    --webroot --webroot-path=/var/www/certbot \
+    --standalone \
     --email "${EMAIL}" \
     --agree-tos --no-eff-email \
     -d "${DOMAIN}"
-  echo "Certificate obtained."
+  echo "Certificate obtained!"
 fi
 
-echo "=== [6/7] Switching nginx to HTTPS config ==="
+echo "=== [6/6] Starting nginx with HTTPS ==="
 sed "s/\${DOMAIN}/${DOMAIN}/g" nginx-template.conf > nginx.conf
-docker compose restart nginx
-echo "HTTPS nginx activated."
+docker compose up -d nginx certbot
 
-echo "=== [7/7] Done! ==="
 echo ""
-echo "  App:    https://${DOMAIN}"
-echo "  Admin:  admin@streamhub.tv / admin123"
-echo ""
+echo "==============================="
+echo "  Deployment complete!"
+echo "  App: https://${DOMAIN}"
+echo "  Admin: admin@streamhub.tv / admin123"
+echo "==============================="
 echo "Change the admin password after first login!"
