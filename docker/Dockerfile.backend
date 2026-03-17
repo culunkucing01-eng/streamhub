@@ -1,0 +1,21 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+RUN npm install -g pnpm
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig.json ./
+COPY lib/ lib/
+COPY artifacts/api-server/ artifacts/api-server/
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @workspace/api-spec run codegen
+RUN pnpm --filter @workspace/api-server run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/artifacts/api-server/dist/index.cjs ./index.cjs
+COPY --from=builder /app/artifacts/api-server/dist/seed.cjs ./seed.cjs
+ENV NODE_ENV=production
+EXPOSE 3001
+CMD ["node", "index.cjs"]

@@ -1,0 +1,1036 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: StreamHub - Community TV Streaming Platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: channels
+    description: Channel management
+  - name: streams
+    description: Stream monitoring
+  - name: billing
+    description: Billing & subscriptions
+  - name: server
+    description: Server monitoring
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /channels:
+    get:
+      operationId: listChannels
+      tags: [channels]
+      summary: List all channels
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Channel list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Channel"
+    post:
+      operationId: createChannel
+      tags: [channels]
+      summary: Create a new channel
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChannelRequest"
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+
+  /channels/{id}:
+    get:
+      operationId: getChannel
+      tags: [channels]
+      summary: Get channel by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Channel details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateChannel
+      tags: [channels]
+      summary: Update a channel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChannelRequest"
+      responses:
+        "200":
+          description: Channel updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+    delete:
+      operationId: deleteChannel
+      tags: [channels]
+      summary: Delete a channel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Channel deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /channels/{id}/regenerate-key:
+    post:
+      operationId: regenerateStreamKey
+      tags: [channels]
+      summary: Regenerate stream key for a channel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: New stream key generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+
+  /streams/active:
+    get:
+      operationId: getActiveStreams
+      tags: [streams]
+      summary: Get active streams from SRS
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Active stream list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActiveStream"
+
+  /streams/clients:
+    get:
+      operationId: getStreamClients
+      tags: [streams]
+      summary: Get active clients from SRS
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Client list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamClients"
+
+  /streams/bandwidth:
+    get:
+      operationId: getStreamBandwidth
+      tags: [streams]
+      summary: Get bandwidth stats from SRS
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Bandwidth statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BandwidthStats"
+
+  /streams/stats:
+    get:
+      operationId: getStreamStats
+      tags: [streams]
+      summary: Get aggregated stream stats
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Aggregated statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /billing/plans:
+    get:
+      operationId: listPlans
+      tags: [billing]
+      summary: List subscription plans
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Plans list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubscriptionPlan"
+    post:
+      operationId: createPlan
+      tags: [billing]
+      summary: Create a subscription plan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlanRequest"
+      responses:
+        "201":
+          description: Plan created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionPlan"
+
+  /billing/plans/{id}:
+    put:
+      operationId: updatePlan
+      tags: [billing]
+      summary: Update a subscription plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlanRequest"
+      responses:
+        "200":
+          description: Plan updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionPlan"
+    delete:
+      operationId: deletePlan
+      tags: [billing]
+      summary: Delete a subscription plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Plan deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /billing/invoices:
+    get:
+      operationId: listInvoices
+      tags: [billing]
+      summary: List invoices
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+    post:
+      operationId: createInvoice
+      tags: [billing]
+      summary: Create an invoice
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceRequest"
+      responses:
+        "201":
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /billing/invoices/{id}:
+    put:
+      operationId: updateInvoice
+      tags: [billing]
+      summary: Update invoice status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceRequest"
+      responses:
+        "200":
+          description: Invoice updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /billing/subscriptions:
+    get:
+      operationId: listSubscriptions
+      tags: [billing]
+      summary: List subscriptions
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Subscription list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Subscription"
+    post:
+      operationId: createSubscription
+      tags: [billing]
+      summary: Create a subscription (channel rental)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionRequest"
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+
+  /server/stats:
+    get:
+      operationId: getServerStats
+      tags: [server]
+      summary: Get server resource stats
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Server statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerStats"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [auth]
+      summary: List users (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator, user]
+          default: user
+      required:
+        - email
+        - password
+        - name
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator, user]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - name
+        - role
+        - createdAt
+
+    Channel:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        streamKey:
+          type: string
+        rtmpUrl:
+          type: string
+        hlsUrl:
+          type: string
+        webrtcUrl:
+          type: string
+        isActive:
+          type: boolean
+        createdById:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - streamKey
+        - rtmpUrl
+        - hlsUrl
+        - webrtcUrl
+        - isActive
+        - createdById
+        - createdAt
+        - updatedAt
+
+    CreateChannelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      required:
+        - name
+
+    UpdateChannelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        isActive:
+          type: boolean
+
+    ActiveStream:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        channelName:
+          type: string
+        clientId:
+          type: string
+        vhost:
+          type: string
+        app:
+          type: string
+        stream:
+          type: string
+        bitrate:
+          type: number
+        viewers:
+          type: integer
+        uptime:
+          type: number
+        isOnline:
+          type: boolean
+        videoCodec:
+          type: string
+        audioCodec:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+      required:
+        - id
+        - name
+        - isOnline
+
+    StreamClients:
+      type: object
+      properties:
+        totalClients:
+          type: integer
+        players:
+          type: integer
+        publishers:
+          type: integer
+        clients:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              ip:
+                type: string
+              type:
+                type: string
+              url:
+                type: string
+              alive:
+                type: number
+      required:
+        - totalClients
+        - players
+        - publishers
+
+    BandwidthStats:
+      type: object
+      properties:
+        ingressBps:
+          type: number
+        egressBps:
+          type: number
+        ingressBytes:
+          type: number
+        egressBytes:
+          type: number
+      required:
+        - ingressBps
+        - egressBps
+        - ingressBytes
+        - egressBytes
+
+    DashboardStats:
+      type: object
+      properties:
+        totalChannels:
+          type: integer
+        activeStreams:
+          type: integer
+        totalViewers:
+          type: integer
+        totalBandwidth:
+          type: number
+        totalUsers:
+          type: integer
+        totalRevenue:
+          type: number
+        recentViewerCounts:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+              count:
+                type: integer
+      required:
+        - totalChannels
+        - activeStreams
+        - totalViewers
+        - totalBandwidth
+        - totalUsers
+        - totalRevenue
+
+    SubscriptionPlan:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        interval:
+          type: string
+          enum: [monthly, yearly]
+        maxChannels:
+          type: integer
+        maxBitrate:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - price
+        - interval
+        - maxChannels
+        - isActive
+        - createdAt
+
+    CreatePlanRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        interval:
+          type: string
+          enum: [monthly, yearly]
+        maxChannels:
+          type: integer
+        maxBitrate:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+      required:
+        - name
+        - price
+        - interval
+        - maxChannels
+
+    UpdatePlanRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        maxChannels:
+          type: integer
+        maxBitrate:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: string
+        subscriptionId:
+          type: integer
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, overdue, cancelled]
+        dueDate:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - amount
+        - status
+        - dueDate
+        - createdAt
+
+    CreateInvoiceRequest:
+      type: object
+      properties:
+        userId:
+          type: integer
+        subscriptionId:
+          type: integer
+        amount:
+          type: number
+        dueDate:
+          type: string
+          format: date-time
+        description:
+          type: string
+      required:
+        - userId
+        - amount
+        - dueDate
+
+    UpdateInvoiceRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, paid, overdue, cancelled]
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - status
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: string
+        planId:
+          type: integer
+        planName:
+          type: string
+        channelId:
+          type: integer
+        channelName:
+          type: string
+        status:
+          type: string
+          enum: [active, cancelled, expired]
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - planId
+        - status
+        - startDate
+        - endDate
+        - createdAt
+
+    CreateSubscriptionRequest:
+      type: object
+      properties:
+        userId:
+          type: integer
+        planId:
+          type: integer
+        channelId:
+          type: integer
+      required:
+        - userId
+        - planId
+
+    ServerStats:
+      type: object
+      properties:
+        cpu:
+          type: object
+          properties:
+            usage:
+              type: number
+            cores:
+              type: integer
+            model:
+              type: string
+        memory:
+          type: object
+          properties:
+            total:
+              type: number
+            used:
+              type: number
+            free:
+              type: number
+            usagePercent:
+              type: number
+        network:
+          type: object
+          properties:
+            rxBytes:
+              type: number
+            txBytes:
+              type: number
+            rxPerSec:
+              type: number
+            txPerSec:
+              type: number
+        activeConnections:
+          type: integer
+        uptime:
+          type: number
+        srsConnected:
+          type: boolean
+      required:
+        - cpu
+        - memory
+        - network
+        - activeConnections
+        - uptime
+        - srsConnected

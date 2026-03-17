@@ -1,0 +1,16 @@
+packages:
+  "hls.js": "Required for HLS video playback in the browser for live streams"
+  "recharts": "For rendering beautiful dashboard charts and server metrics"
+  "framer-motion": "For fluid UI animations, page transitions, and staggered lists"
+  "date-fns": "For formatting timestamps, due dates, and stream uptimes"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility for merging tailwind classes without conflicts"
+
+images:
+  - path: "artifacts/web/public/images/login-bg.png"
+    description: "Dark, abstract, professional broadcasting theme with glowing neon blue and purple sound waves or data streams on a very dark slate background. Minimalist, premium tech aesthetic with soft light leaks."
+    aspect_ratio: "16:9"
+
+notes:
+  - Auth token is expected to be stored in localStorage under the key 'token' for the generated api client to pick it up (standard implementation).
+  - The frontend assumes the existence of the provided Shadcn UI components in `src/components/ui/`.
