@@ -1,10 +1,6 @@
 import path from "path";
-import { fileURLToPath } from "url";
 import { build as esbuild } from "esbuild";
 import { rm, readFile } from "fs/promises";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times without risking some
@@ -43,11 +39,11 @@ const allowlist = [
 ];
 
 async function buildAll() {
-  const distDir = path.resolve(__dirname, "dist");
+  const distDir = path.join(process.cwd(), "dist");
   await rm(distDir, { recursive: true, force: true });
 
   console.log("building server...");
-  const pkgPath = path.resolve(__dirname, "package.json");
+  const pkgPath = path.join(process.cwd(), "package.json");
   const pkg = JSON.parse(await readFile(pkgPath, "utf-8"));
   const allDeps = [
     ...Object.keys(pkg.dependencies || {}),
@@ -73,15 +69,15 @@ async function buildAll() {
 
   await esbuild({
     ...sharedOpts,
-    entryPoints: [path.resolve(__dirname, "src/index.ts")],
-    outfile: path.resolve(distDir, "index.cjs"),
+    entryPoints: [path.join(process.cwd(), "src/index.ts")],
+    outfile: path.join(distDir, "index.cjs"),
   });
 
   console.log("building seed script...");
   await esbuild({
     ...sharedOpts,
-    entryPoints: [path.resolve(__dirname, "src/seed.ts")],
-    outfile: path.resolve(distDir, "seed.cjs"),
+    entryPoints: [path.join(process.cwd(), "src/seed.ts")],
+    outfile: path.join(distDir, "seed.cjs"),
   });
 }
 
