@@ -1,11 +1,7 @@
 import path from "path";
-import { fileURLToPath } from "url";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { db, pool } from "@workspace/db";
+import { db } from "@workspace/db";
 import app from "./app";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const rawPort = process.env["PORT"];
 
@@ -22,7 +18,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function main() {
-  const migrationsFolder = path.resolve(__dirname, "drizzle");
+  const migrationsFolder = path.join(process.cwd(), "drizzle");
   try {
     console.log("Running database migrations...");
     await migrate(db, { migrationsFolder });
