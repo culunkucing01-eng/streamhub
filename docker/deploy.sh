@@ -26,13 +26,13 @@ NODE_ENV=production
 EOF
 
 echo "=== [2/7] Pulling latest images & rebuilding ==="
-docker compose pull postgres srs nginx certbot 2>/dev/null || true
+docker compose pull postgres nginx certbot 2>/dev/null || true
 docker compose build --no-cache backend frontend
 
 echo "=== [3/7] Starting with HTTP-only nginx (no SSL yet) ==="
 cp nginx-http.conf nginx.conf
 docker compose down --remove-orphans || true
-docker compose up -d postgres backend frontend nginx srs
+docker compose up -d postgres backend frontend nginx
 
 echo "Waiting 30s for backend migrations and startup..."
 sleep 30

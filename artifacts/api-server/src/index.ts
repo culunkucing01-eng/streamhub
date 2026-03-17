@@ -21,7 +21,7 @@ async function main() {
   const migrationsFolder = path.join(process.cwd(), "drizzle");
   try {
     console.log("Running database migrations...");
-    await migrate(db, { migrationsFolder });
+    await migrate(db, { migrationsFolder, migrationsSchema: "public", migrationsTable: "__drizzle_migrations" });
     console.log("Migrations complete.");
   } catch (err) {
     console.error("Migration failed (tables may already exist):", (err as Error).message);
