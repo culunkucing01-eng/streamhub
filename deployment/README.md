@@ -27,18 +27,10 @@ docker compose version
 
 ---
 
-## Langkah 2 — Upload Kode ke VPS
+## Langkah 2 — Clone Kode ke VPS
 
-**Opsi A — lewat Git (disarankan):**
 ```bash
-git clone https://github.com/kamu/streamhub.git
-cd streamhub
-```
-
-**Opsi B — lewat SCP dari komputer lokal:**
-```bash
-scp -r ./streamhub user@IP_VPS:/home/user/streamhub
-ssh user@IP_VPS
+git clone https://github.com/culunkucing01-eng/streamhub.git
 cd streamhub
 ```
 
