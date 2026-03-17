@@ -25,20 +25,24 @@ DOMAIN=${DOMAIN}
 NODE_ENV=production
 EOF
 
-echo "=== [2/7] Pulling latest images & rebuilding ==="
+echo "=== [2/7] Rebuilding images ==="
 docker compose pull postgres nginx certbot 2>/dev/null || true
 docker compose build --no-cache backend frontend
 
 echo "=== [3/7] Starting with HTTP-only nginx (no SSL yet) ==="
 cp nginx-http.conf nginx.conf
-docker compose down --remove-orphans || true
+
+# Stop all containers and remove postgres volume to fix password mismatch
+docker compose down --remove-orphans --volumes 2>/dev/null || true
+docker volume rm docker_postgres_data 2>/dev/null || true
+
 docker compose up -d postgres backend frontend nginx
 
-echo "Waiting 30s for backend migrations and startup..."
-sleep 30
+echo "Waiting 45s for database init and backend migrations..."
+sleep 45
 
 echo "=== [4/7] Seeding database ==="
-docker compose exec backend node seed.cjs && echo "Seed OK" || echo "Seed skipped (already seeded?)"
+docker compose exec backend node seed.cjs && echo "Seed OK" || echo "Seed skipped (may already be seeded)"
 
 echo "=== [5/7] Obtaining SSL certificate ==="
 CERT_PATH="certbot/conf/live/${DOMAIN}/fullchain.pem"
@@ -46,6 +50,20 @@ if [ -f "$CERT_PATH" ]; then
   echo "Certificate already exists, skipping certbot."
 else
   mkdir -p certbot/www certbot/conf
+
+  # Verify nginx is serving the webroot correctly
+  mkdir -p certbot/www/.well-known/acme-challenge
+  echo "ok" > certbot/www/.well-known/acme-challenge/test
+  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://${DOMAIN}/.well-known/acme-challenge/test" 2>/dev/null || echo "000")
+  rm -f certbot/www/.well-known/acme-challenge/test
+
+  if [ "$HTTP_STATUS" != "200" ]; then
+    echo "WARNING: nginx webroot test failed (HTTP $HTTP_STATUS). Certbot may fail."
+    echo "Check that port 80 is open and nginx is running."
+  else
+    echo "Nginx webroot OK (HTTP 200). Running certbot..."
+  fi
+
   docker run --rm \
     -v "$(pwd)/certbot/www:/var/www/certbot" \
     -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
@@ -59,7 +77,7 @@ fi
 
 echo "=== [6/7] Switching nginx to HTTPS config ==="
 sed "s/\${DOMAIN}/${DOMAIN}/g" nginx-template.conf > nginx.conf
-docker compose exec nginx nginx -s reload
+docker compose restart nginx
 echo "HTTPS nginx activated."
 
 echo "=== [7/7] Done! ==="
