@@ -9,7 +9,8 @@ COPY lib/ lib/
 COPY artifacts/web/ artifacts/web/
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @workspace/api-spec run codegen
+
+ENV NODE_ENV=production
 RUN pnpm --filter @workspace/web run build
 
 FROM nginx:alpine
