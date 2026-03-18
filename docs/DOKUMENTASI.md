@@ -65,12 +65,16 @@
 - Bandwidth inbound/outbound dari SRS
 
 ### Public Player
-- Halaman player HLS publik di `/player/:id` — tanpa perlu login
+- Halaman player publik di `/player/:id` — tanpa perlu login
+- **Protokol utama: WebRTC (WHEP)** — latency < 1 detik
+- **Fallback otomatis ke HLS** jika WebRTC tidak tersedia di browser
 - Support autoplay, fullscreen, mobile-friendly
+- Indikator protokol aktif (WebRTC / HLS) di sudut kanan bawah kontrol player
 - Badge LIVE dan status offline jika stream tidak aktif
 
 ### Embed Player
 - Halaman player minimal di `/embed/:id` untuk di-embed ke website lain
+- Mendukung WebRTC (WHEP) + fallback HLS otomatis
 - Mendukung autoplay, iframe-friendly, dark background
 - Bisa di-embed ke mana saja via tag `<iframe>`
 
@@ -126,9 +130,13 @@
 
 **Alur Streaming:**
 1. OBS/vMix mengirim RTMP ke `rtmp://stream.studioserver.space/live/{stream-key}`
-2. SRS menerima RTMP dan mengkonversi ke HLS (`.m3u8`) — file disimpan di `/usr/local/srs/objs/nginx/`
-3. Viewer mengakses HLS via `https://studioserver.space/live/{stream-key}.m3u8`
-4. Nginx memproxy `/live/*` ke SRS port 8080
+2. SRS menerima RTMP dan secara bersamaan:
+   - Mengkonversi ke **HLS** (`.m3u8`) — disimpan di `/usr/local/srs/objs/nginx/`, latency 10–20 detik
+   - Mengkonversi ke **WebRTC** (via `rtmp_to_rtc`) — latency < 1 detik
+3. Viewer mengakses melalui player yang **mencoba WebRTC dulu, fallback ke HLS** otomatis
+   - WebRTC: `https://studioserver.space/rtc/v1/whep/?app=live&stream={key}`
+   - HLS: `https://studioserver.space/live/{key}.m3u8`
+4. Nginx memproxy `/rtc/*` ke SRS port 1985 (WebRTC) dan `/live/*` ke SRS port 8080 (HLS)
 5. Backend mengquery SRS API (port 1985) setiap 3 detik untuk monitoring
 
 ---

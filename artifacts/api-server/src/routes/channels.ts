@@ -99,6 +99,7 @@ router.get("/channels/public/:id", async (req, res) => {
       isActive: full.isActive,
       hlsUrl: full.hlsUrl,
       mp4Url: full.mp4Url,
+      webrtcUrl: full.webrtcUrl,
       createdAt: full.createdAt,
     });
   } catch (err: unknown) {
