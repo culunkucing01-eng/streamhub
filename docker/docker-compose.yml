@@ -28,13 +28,13 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-streamhub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-streamhub}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
-      SRS_API_URL: ${SRS_API_URL:-http://srs:1985}
-      SRS_PLAYBACK_URL: ${SRS_PLAYBACK_URL:-http://srs:8080}
-      APP_DOMAIN: ${DOMAIN}
-      FRONTEND_URL: http://${DOMAIN}:${APP_PORT:-8088}
+      SRS_API_URL: ${SRS_API_URL:-http://localhost:1985}
+      SRS_PLAYBACK_URL: ${SRS_PLAYBACK_URL:-http://localhost:8080}
+      APP_DOMAIN: ${DOMAIN:-studioserver.space}
+      FRONTEND_URL: https://${DOMAIN:-studioserver.space}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_CALLBACK_URL: http://${DOMAIN}:${APP_PORT:-8088}/api/auth/google/callback
+      GOOGLE_CALLBACK_URL: https://${DOMAIN:-studioserver.space}/api/auth/google/callback
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,16 +55,11 @@ services:
     network_mode: host
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       - frontend
       - backend
-
-  certbot:
-    image: certbot/certbot:latest
-    volumes:
-      - ./certbot/www:/var/www/certbot
-      - ./certbot/conf:/etc/letsencrypt
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 volumes:
   postgres_data:
