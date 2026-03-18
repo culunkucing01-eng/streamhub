@@ -4,7 +4,7 @@ import type { Channel } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Settings, Copy, Trash2, KeyRound, ExternalLink, Loader2, RefreshCw, Tv } from "lucide-react";
+import { Plus, Settings, Copy, Trash2, KeyRound, ExternalLink, Loader2, RefreshCw, Tv, CheckCheck, Radio, Code2 } from "lucide-react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -14,6 +14,7 @@ export default function Channels() {
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editChannel, setEditChannel] = useState<Channel | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   
   const createMutation = useCreateChannel({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/channels'] }); setIsCreateOpen(false); } } });
   const updateMutation = useUpdateChannel({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/channels'] }); setEditChannel(null); } } });
@@ -40,10 +41,25 @@ export default function Channels() {
     });
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
-    // In a real app, show a toast here
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
+
+  const CopyButton = ({ text, id }: { text: string; id: string }) => (
+    <button
+      onClick={() => copyToClipboard(text, id)}
+      className={cn(
+        "p-2 rounded-lg transition-all duration-200 flex-shrink-0",
+        copiedKey === id
+          ? "bg-green-500/20 text-green-500 border border-green-500/30"
+          : "bg-secondary hover:bg-secondary/80 text-foreground"
+      )}
+    >
+      {copiedKey === id ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+    </button>
+  );
 
   const ChannelModal = ({ channel, onClose }: { channel?: Channel | null, onClose: () => void }) => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -130,41 +146,115 @@ export default function Channels() {
                   </div>
                 </div>
 
-                <div className="p-6 bg-background/30 space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><KeyRound className="w-3.5 h-3.5" /> Stream Key</label>
-                      <button onClick={() => regenMutation.mutate({ id: channel.id })} className="text-xs text-primary hover:underline flex items-center gap-1">
-                        <RefreshCw className={cn("w-3 h-3", regenMutation.isPending && "animate-spin")} /> Regenerate
-                      </button>
+                <div className="p-6 bg-background/30 space-y-5">
+
+                  {/* OBS / vMix Setup Section */}
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Radio className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-bold text-primary uppercase tracking-wider">OBS / vMix Setup</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <input type="password" readOnly value={channel.streamKey} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-muted-foreground focus:outline-none" />
-                      <button onClick={() => copyToClipboard(channel.streamKey)} className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground"><Copy className="w-4 h-4" /></button>
+
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Server (paste ke OBS → Service → Server)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value="rtmp://stream.studioserver.space/live"
+                          className="flex-1 bg-background border border-primary/30 rounded-lg px-3 py-2 text-sm font-mono text-foreground focus:outline-none"
+                        />
+                        <CopyButton text="rtmp://stream.studioserver.space/live" id={`obs-server-${channel.id}`} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <KeyRound className="w-3.5 h-3.5" /> Stream Key (paste ke OBS → Service → Stream Key)
+                        </label>
+                        <button onClick={() => regenMutation.mutate({ id: channel.id })} className="text-xs text-primary hover:underline flex items-center gap-1">
+                          <RefreshCw className={cn("w-3 h-3", regenMutation.isPending && "animate-spin")} /> Regenerate
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="password" readOnly value={channel.streamKey} className="flex-1 bg-background border border-primary/30 rounded-lg px-3 py-2 text-sm font-mono text-foreground focus:outline-none" />
+                        <CopyButton text={channel.streamKey} id={`obs-key-${channel.id}`} />
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">RTMP Ingest URL</label>
+                  {/* Website Embed Section */}
+                  <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <input type="text" readOnly value={channel.rtmpUrl} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-muted-foreground focus:outline-none" />
-                      <button onClick={() => copyToClipboard(channel.rtmpUrl)} className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground"><Copy className="w-4 h-4" /></button>
+                      <Code2 className="w-4 h-4 text-green-500" />
+                      <span className="text-sm font-bold text-green-500 uppercase tracking-wider">Embed ke Website (Autoplay)</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Paste kode ini ke website/HTML kamu untuk embed live stream langsung dengan autoplay.</p>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Kode Iframe</label>
+                      {(() => {
+                        const embedUrl = `${window.location.origin}/embed/${channel.id}`;
+                        const iframeCode = `<iframe src="${embedUrl}" width="1280" height="720" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+                        return (
+                          <div className="flex items-start gap-2">
+                            <textarea
+                              readOnly
+                              value={iframeCode}
+                              rows={3}
+                              className="flex-1 bg-background border border-green-500/30 rounded-lg px-3 py-2 text-xs font-mono text-foreground focus:outline-none resize-none"
+                            />
+                            <CopyButton text={iframeCode} id={`embed-code-${channel.id}`} />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">URL Embed Langsung</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={`${window.location.origin}/embed/${channel.id}`}
+                          className="flex-1 bg-background border border-green-500/30 rounded-lg px-3 py-1.5 text-sm font-mono text-foreground focus:outline-none"
+                        />
+                        <CopyButton text={`${window.location.origin}/embed/${channel.id}`} id={`embed-url-${channel.id}`} />
+                        <a
+                          href={`/embed/${channel.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 rounded-lg bg-green-500/20 text-green-500 hover:bg-green-500/30 transition-colors flex-shrink-0"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">HLS Playback URL</label>
-                    <div className="flex items-center gap-2">
-                      <input type="text" readOnly value={channel.hlsUrl} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-muted-foreground focus:outline-none" />
-                      <button onClick={() => copyToClipboard(channel.hlsUrl)} className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground"><Copy className="w-4 h-4" /></button>
+                  {/* Technical URLs */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">RTMP Ingest URL (full)</label>
+                      <div className="flex items-center gap-2">
+                        <input type="text" readOnly value={`rtmp://stream.studioserver.space/live/${channel.streamKey}`} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-muted-foreground focus:outline-none" />
+                        <CopyButton text={`rtmp://stream.studioserver.space/live/${channel.streamKey}`} id={`rtmp-${channel.id}`} />
+                      </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">WebRTC Playback URL</label>
-                    <div className="flex items-center gap-2">
-                      <input type="text" readOnly value={channel.webrtcUrl} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-muted-foreground focus:outline-none" />
-                      <button onClick={() => copyToClipboard(channel.webrtcUrl)} className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground"><Copy className="w-4 h-4" /></button>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">HLS Playback URL</label>
+                      <div className="flex items-center gap-2">
+                        <input type="text" readOnly value={channel.hlsUrl} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-muted-foreground focus:outline-none" />
+                        <CopyButton text={channel.hlsUrl} id={`hls-${channel.id}`} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">WebRTC Playback URL</label>
+                      <div className="flex items-center gap-2">
+                        <input type="text" readOnly value={channel.webrtcUrl} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-muted-foreground focus:outline-none" />
+                        <CopyButton text={channel.webrtcUrl} id={`webrtc-${channel.id}`} />
+                      </div>
                     </div>
                   </div>
 

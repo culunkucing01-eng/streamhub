@@ -61,19 +61,40 @@ router.get("/streams/active", authMiddleware, async (_req, res) => {
     const channelMap = new Map(channels.map((c) => [c.streamKey, c]));
 
     if (srsData && srsData.streams) {
-      const activeStreams = srsData.streams.map((s) => {
+      // Deduplicate by stream name (keep highest bitrate entry per key)
+      const bestByKey = new Map<string, SrsStream>();
+      for (const s of srsData.streams) {
+        const key = s.name || "";
+        // Only consider streams that:
+        // 1. Match a known channel stream key in our database
+        // 2. Have an active publisher (someone is actually pushing RTMP right now)
+        if (!channelMap.has(key)) continue;
+        if (!s.publish?.active) continue;
+
+        const existing = bestByKey.get(key);
+        const currentBitrate = s.kbps?.recv_30s || 0;
+        const existingBitrate = existing?.kbps?.recv_30s || 0;
+        if (!existing || currentBitrate > existingBitrate) {
+          bestByKey.set(key, s);
+        }
+      }
+
+      const activeStreams = Array.from(bestByKey.values()).map((s) => {
         const streamName = s.name || "";
-        const channel = channelMap.get(streamName);
+        const channel = channelMap.get(streamName)!;
+        // SRS counts the publisher itself as a client, so subtract 1 for real viewers
+        const rawClients = s.clients || 0;
+        const viewers = Math.max(0, rawClients - 1);
         return {
           id: String(s.id || ""),
           name: streamName,
-          channelName: channel?.name || streamName,
+          channelName: channel.name,
           clientId: String(s.publish?.cid || ""),
           vhost: s.vhost || "",
           app: s.app || "live",
           stream: streamName,
           bitrate: (s.kbps?.recv_30s || 0) * 1000,
-          viewers: s.clients || 0,
+          viewers,
           uptime: s.publish?.active || 0,
           isOnline: true,
           videoCodec: s.video?.codec || "",
@@ -82,29 +103,11 @@ router.get("/streams/active", authMiddleware, async (_req, res) => {
           height: s.video?.height || 0,
         };
       });
+
       res.json(activeStreams);
     } else {
-      const mockStreams = channels
-        .filter((c) => c.isActive)
-        .slice(0, 2)
-        .map((c) => ({
-          id: String(c.id),
-          name: c.streamKey,
-          channelName: c.name,
-          clientId: "",
-          vhost: "",
-          app: "live",
-          stream: c.streamKey,
-          bitrate: 0,
-          viewers: 0,
-          uptime: 0,
-          isOnline: false,
-          videoCodec: "",
-          audioCodec: "",
-          width: 0,
-          height: 0,
-        }));
-      res.json(mockStreams);
+      // SRS unreachable — return empty list (don't fabricate data)
+      res.json([]);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch streams";
@@ -169,10 +172,20 @@ router.get("/streams/stats", authMiddleware, async (_req, res) => {
     let totalViewers = 0;
     let totalBandwidth = 0;
 
+    const channels = await db.select().from(channelsTable);
+    const channelMap = new Map(channels.map((c) => [c.streamKey, c]));
+
     const srsData = await fetchSRS<SrsStreamsResponse>("/api/v1/streams/");
     if (srsData && srsData.streams) {
-      activeStreams = srsData.streams.length;
-      totalViewers = srsData.streams.reduce((acc: number, s) => acc + (s.clients || 0), 0);
+      // Only count known channels with active publishers (same logic as /streams/active)
+      const knownActive = srsData.streams.filter(
+        (s) => channelMap.has(s.name || "") && s.publish?.active
+      );
+      // Deduplicate by stream name
+      const uniqueKeys = new Set(knownActive.map((s) => s.name || ""));
+      activeStreams = uniqueKeys.size;
+      // Viewers: subtract 1 per stream for the publisher
+      totalViewers = knownActive.reduce((acc: number, s) => acc + Math.max(0, (s.clients || 0) - 1), 0);
     }
 
     const bandwidthData = await fetchSRS<SrsSummariesResponse>("/api/v1/summaries");

@@ -15,9 +15,9 @@ import { authMiddleware, requireRole, type AuthenticatedRequest } from "../lib/a
 
 const router: IRouter = Router();
 
-const SRS_API_URL = process.env.SRS_API_URL || "http://localhost:1985";
-const SRS_PLAYBACK_URL = process.env.SRS_PLAYBACK_URL || "http://localhost:8080";
-const APP_DOMAIN = process.env.APP_DOMAIN || new URL(SRS_API_URL).hostname;
+const SRS_API_URL = process.env.SRS_API_URL || "http://srs:1985";
+const SRS_PLAYBACK_URL = process.env.SRS_PLAYBACK_URL || "https://studioserver.space";
+const RTMP_HOST = process.env.RTMP_HOST || "stream.studioserver.space";
 
 function generateStreamKey(): string {
   return crypto.randomBytes(16).toString("hex");
@@ -40,7 +40,7 @@ function buildChannelResponse(channel: ChannelRow) {
     name: channel.name,
     description: channel.description || "",
     streamKey: channel.streamKey,
-    rtmpUrl: `rtmp://${APP_DOMAIN}/live/${channel.streamKey}`,
+    rtmpUrl: `rtmp://${RTMP_HOST}/live/${channel.streamKey}`,
     hlsUrl: `${SRS_PLAYBACK_URL}/live/${channel.streamKey}.m3u8`,
     mp4Url: `${SRS_PLAYBACK_URL}/live/${channel.streamKey}.mp4`,
     webrtcUrl: `${SRS_PLAYBACK_URL}/rtc/v1/whep/?app=live&stream=${channel.streamKey}`,

@@ -10,6 +10,8 @@ import Invoices from "@/pages/billing/invoices";
 import Subscriptions from "@/pages/billing/subscriptions";
 import ServerMonitor from "@/pages/server";
 import PublicPlayer from "@/pages/public-player";
+import EmbedPlayer from "@/pages/embed-player";
+import Profile from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 
@@ -40,6 +42,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/player/:id" component={PublicPlayer} />
+      <Route path="/embed/:id" component={EmbedPlayer} />
       
       {/* Protected Routes */}
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
@@ -49,6 +52,7 @@ function Router() {
       <Route path="/billing/invoices" component={() => <ProtectedRoute component={Invoices} />} />
       <Route path="/billing/subscriptions" component={() => <ProtectedRoute component={Subscriptions} />} />
       <Route path="/server" component={() => <ProtectedRoute component={ServerMonitor} />} />
+      <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
       
       <Route component={NotFound} />
     </Switch>

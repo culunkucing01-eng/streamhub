@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { 
   Tv, Activity, CreditCard, Server, LogOut, 
-  Menu, X, Radio, ListVideo, FileText, User
+  Menu, X, Radio, ListVideo, FileText, User, ChevronRight
 } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -53,15 +53,33 @@ export function Layout({ children }: { children: ReactNode }) {
       </div>
 
       <div className="p-4 mt-auto border-t border-border/50">
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-secondary/50 mb-2">
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-            <User className="w-4 h-4 text-primary" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-foreground truncate max-w-[120px]">{user?.name}</span>
+        <Link
+          href="/profile"
+          onClick={() => setMobileMenuOpen(false)}
+          className={cn(
+            "flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all group",
+            location === "/profile"
+              ? "bg-primary/10 border border-primary/20"
+              : "bg-secondary/50 hover:bg-secondary/80"
+          )}
+        >
+          {(user as { avatarUrl?: string })?.avatarUrl ? (
+            <img
+              src={(user as { avatarUrl?: string }).avatarUrl}
+              alt={user?.name}
+              className="w-8 h-8 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-primary" />
+            </div>
+          )}
+          <div className="flex flex-col min-w-0 flex-1">
+            <span className="text-sm font-semibold text-foreground truncate">{user?.name}</span>
             <span className="text-xs text-muted-foreground uppercase tracking-wider">{user?.role}</span>
           </div>
-        </div>
+          <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+        </Link>
         <button
           onClick={logout}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors text-sm font-medium"

@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogin } from "@workspace/api-client-react";
-import { motion } from "framer-motion";
-import { Tv, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Tv, Loader2, User, Mail, KeyRound } from "lucide-react";
 
 function GoogleIcon() {
   return (
@@ -17,11 +17,19 @@ function GoogleIcon() {
 }
 
 export default function Login() {
+  const [tab, setTab] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirm, setRegConfirm] = useState("");
   const [urlError, setUrlError] = useState("");
+  const [regError, setRegError] = useState("");
+  const [regSuccess, setRegSuccess] = useState("");
+  const [regLoading, setRegLoading] = useState(false);
   const { setToken } = useAuth();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
 
   const loginMutation = useLogin({
     mutation: {
@@ -46,9 +54,39 @@ export default function Login() {
     }
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     loginMutation.mutate({ data: { email, password } });
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegError("");
+    setRegSuccess("");
+    if (regPassword !== regConfirm) {
+      setRegError("Passwords do not match.");
+      return;
+    }
+    if (regPassword.length < 8) {
+      setRegError("Password must be at least 8 characters.");
+      return;
+    }
+    setRegLoading(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: regName, email: regEmail, password: regPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Registration failed");
+      setToken(data.token);
+      setLocation("/");
+    } catch (err: unknown) {
+      setRegError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setRegLoading(false);
+    }
   };
 
   const handleGoogleLogin = () => {
@@ -58,16 +96,16 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex relative overflow-hidden bg-background">
       <div className="absolute inset-0 z-0">
-        <img 
-          src={`${import.meta.env.BASE_URL}images/login-bg.png`} 
-          alt="Abstract Broadcasting Background" 
+        <img
+          src={`${import.meta.env.BASE_URL}images/login-bg.png`}
+          alt="Abstract Broadcasting Background"
           className="w-full h-full object-cover opacity-40 mix-blend-screen"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-transparent" />
       </div>
 
       <div className="flex-1 flex items-center justify-start p-8 sm:p-12 lg:p-24 z-10">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6 }}
@@ -81,63 +119,172 @@ export default function Login() {
           </div>
 
           <div className="glass p-8 rounded-3xl">
-            <h1 className="text-2xl font-bold text-white mb-2">Welcome Back</h1>
-            <p className="text-muted-foreground mb-8">Sign in to manage your broadcasting network.</p>
-
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              className="w-full mb-5 py-3 px-4 rounded-xl bg-white hover:bg-gray-50 text-gray-800 font-semibold shadow flex items-center justify-center gap-3 transition-all active:scale-[0.98] border border-gray-200"
-            >
-              <GoogleIcon />
-              Continue with Google
-            </button>
-
-            <div className="flex items-center gap-3 mb-5">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground">or sign in with email</span>
-              <div className="flex-1 h-px bg-border" />
+            {/* Tabs */}
+            <div className="flex rounded-xl bg-secondary/50 p-1 mb-6 gap-1">
+              <button
+                onClick={() => setTab("login")}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "login" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => setTab("register")}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "register" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Create Account
+              </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Email Address</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground placeholder:text-muted-foreground"
-                  placeholder="admin@streamhub.tv"
-                  required
-                />
-              </div>
+            <AnimatePresence mode="wait">
+              {tab === "login" ? (
+                <motion.div key="login" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
+                  <p className="text-muted-foreground mb-6 text-sm">Sign in to manage your broadcasting network.</p>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground placeholder:text-muted-foreground"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    className="w-full mb-5 py-3 px-4 rounded-xl bg-white hover:bg-gray-50 text-gray-800 font-semibold shadow flex items-center justify-center gap-3 transition-all active:scale-[0.98] border border-gray-200"
+                  >
+                    <GoogleIcon />
+                    Continue with Google
+                  </button>
 
-              {(loginMutation.isError || urlError) && (
-                <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
-                  {urlError || "Invalid credentials. Please try again."}
-                </div>
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-xs text-muted-foreground">or sign in with email</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Email Address</label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground placeholder:text-muted-foreground"
+                        placeholder="admin@streamhub.tv"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Password</label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground placeholder:text-muted-foreground"
+                        placeholder="••••••••"
+                        required
+                      />
+                    </div>
+                    {(loginMutation.isError || urlError) && (
+                      <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
+                        {urlError || "Invalid credentials. Please try again."}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={loginMutation.isPending}
+                      className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-white font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all active:scale-[0.98] flex items-center justify-center disabled:opacity-70"
+                    >
+                      {loginMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Sign In"}
+                    </button>
+                  </form>
+                </motion.div>
+              ) : (
+                <motion.div key="register" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}>
+                  <p className="text-muted-foreground mb-6 text-sm">Create a free account to get started. You can upgrade to a plan anytime.</p>
+
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    className="w-full mb-5 py-3 px-4 rounded-xl bg-white hover:bg-gray-50 text-gray-800 font-semibold shadow flex items-center justify-center gap-3 transition-all active:scale-[0.98] border border-gray-200"
+                  >
+                    <GoogleIcon />
+                    Register with Google
+                  </button>
+
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-xs text-muted-foreground">or register with email</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5" /> Full Name
+                      </label>
+                      <input
+                        type="text"
+                        value={regName}
+                        onChange={(e) => setRegName(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground placeholder:text-muted-foreground"
+                        placeholder="Your full name"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5" /> Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground placeholder:text-muted-foreground"
+                        placeholder="you@example.com"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+                          <KeyRound className="w-3.5 h-3.5" /> Password
+                        </label>
+                        <input
+                          type="password"
+                          value={regPassword}
+                          onChange={(e) => setRegPassword(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground placeholder:text-muted-foreground"
+                          placeholder="Min. 8 chars"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">Confirm</label>
+                        <input
+                          type="password"
+                          value={regConfirm}
+                          onChange={(e) => setRegConfirm(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl bg-secondary/50 border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground placeholder:text-muted-foreground"
+                          placeholder="••••••••"
+                          required
+                        />
+                      </div>
+                    </div>
+                    {regError && (
+                      <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
+                        {regError}
+                      </div>
+                    )}
+                    {regSuccess && (
+                      <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium">
+                        {regSuccess}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={regLoading}
+                      className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-white font-semibold shadow-lg shadow-primary/25 transition-all active:scale-[0.98] flex items-center justify-center disabled:opacity-70"
+                    >
+                      {regLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Create Free Account"}
+                    </button>
+                  </form>
+                </motion.div>
               )}
-
-              <button
-                type="submit"
-                disabled={loginMutation.isPending}
-                className="w-full mt-4 py-3 px-4 rounded-xl bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-white font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all active:scale-[0.98] flex items-center justify-center disabled:opacity-70"
-              >
-                {loginMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Sign In"}
-              </button>
-            </form>
+            </AnimatePresence>
           </div>
         </motion.div>
       </div>

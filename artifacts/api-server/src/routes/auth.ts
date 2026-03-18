@@ -89,10 +89,67 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
       email: user.email,
       name: user.name,
       role: user.role,
+      avatarUrl: user.avatarUrl || null,
+      googleId: user.googleId || null,
       createdAt: user.createdAt.toISOString(),
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to get user";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.put("/auth/profile", authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as AuthenticatedRequest).user.userId;
+    const { name, currentPassword, newPassword } = req.body;
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const updates: Record<string, unknown> = {};
+
+    if (name && typeof name === "string" && name.trim()) {
+      updates.name = name.trim();
+    }
+
+    if (newPassword) {
+      if (!currentPassword) {
+        res.status(400).json({ error: "Current password is required to set a new password" });
+        return;
+      }
+      if (user.googleId && !user.password) {
+        res.status(400).json({ error: "Google accounts cannot set a password this way" });
+        return;
+      }
+      const valid = user.password ? await comparePassword(currentPassword, user.password) : false;
+      if (!valid) {
+        res.status(400).json({ error: "Current password is incorrect" });
+        return;
+      }
+      updates.password = await hashPassword(newPassword);
+    }
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "No changes provided" });
+      return;
+    }
+
+    const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
+    res.json({
+      id: updated.id,
+      email: updated.email,
+      name: updated.name,
+      role: updated.role,
+      avatarUrl: updated.avatarUrl || null,
+      googleId: updated.googleId || null,
+      createdAt: updated.createdAt.toISOString(),
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update profile";
     res.status(500).json({ error: message });
   }
 });
