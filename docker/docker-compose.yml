@@ -42,9 +42,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-streamhub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-streamhub}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
-      SRS_API_URL: http://localhost:1985
+      SRS_API_URL: http://srs:1985
       SRS_PLAYBACK_URL: https://${DOMAIN:-studioserver.space}
       APP_DOMAIN: ${DOMAIN:-studioserver.space}
+      RTMP_HOST: ${RTMP_DOMAIN:-stream.studioserver.space}
       FRONTEND_URL: https://${DOMAIN:-studioserver.space}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}

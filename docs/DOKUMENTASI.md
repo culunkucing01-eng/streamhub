@@ -38,20 +38,22 @@
 ## 2. Fitur-Fitur
 
 ### Dashboard
-- Ringkasan platform: jumlah channel aktif, total viewer, bitrate, uptime
-- Grafik statistik stream dan viewer real-time
+- Ringkasan platform: jumlah channel aktif, total viewer, bitrate jaringan, uptime
+- Grafik statistik stream dan viewer real-time (24 jam terakhir)
 - Status koneksi SRS media server
 
 ### Manajemen Channel
 - Buat, edit, hapus channel siaran
 - Generate/regenerate stream key secara aman
 - Tampilan lengkap URL OBS Setup, HLS, RTMP, WebRTC, dan Embed Code
-- Salin URL/key dengan satu klik (tombol copy dengan feedback)
+- Salin URL/key dengan satu klik (tombol copy dengan feedback visual)
 
 ### Live Stream Monitoring
 - Daftar stream yang sedang aktif secara real-time dari SRS
-- Informasi per stream: viewer, bitrate, codec, uptime
-- Auto-refresh setiap 10 detik
+- Informasi per stream: viewer, bitrate, codec (video/audio), uptime
+- **Auto-refresh setiap 3 detik**
+- **Grace cache 30 detik** — stream tetap tampil di dashboard meski OBS sesaat drop frames atau disconnect singkat
+- Deteksi otomatis stream key valid (hanya stream yang terdaftar di database yang ditampilkan)
 
 ### Sistem Billing
 - Manajemen paket/plan berlangganan (nama, harga, fitur, batas channel)
@@ -60,7 +62,7 @@
 
 ### Server Monitor
 - Statistik server real-time: CPU usage, RAM, uptime, network I/O
-- Data langsung dari OS via SRS API
+- Bandwidth inbound/outbound dari SRS
 
 ### Public Player
 - Halaman player HLS publik di `/player/:id` — tanpa perlu login
@@ -95,11 +97,11 @@
 │                                                          │
 │  ┌─────────────────────────────────────────────────┐    │
 │  │              Nginx (network_mode: host)          │    │
-│  │  :80 → redirect HTTPS                           │    │
-│  │  :443 → /api/* → backend:3001                  │    │
-│  │          /live/* → SRS:8080 (HLS)              │    │
-│  │          /rtc/*  → SRS:1985 (WebRTC)           │    │
-│  │          /*      → frontend:8079               │    │
+│  │  :80  → redirect HTTPS                          │    │
+│  │  :443 → /api/*  → backend:3001                  │    │
+│  │          /live/* → SRS:8080 (HLS)               │    │
+│  │          /rtc/*  → SRS:1985 (WebRTC)            │    │
+│  │          /*      → frontend:8079                │    │
 │  └─────────────────────────────────────────────────┘    │
 │                                                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
@@ -124,9 +126,10 @@
 
 **Alur Streaming:**
 1. OBS/vMix mengirim RTMP ke `rtmp://stream.studioserver.space/live/{stream-key}`
-2. SRS menerima RTMP dan mengkonversi ke HLS (`.m3u8`)
+2. SRS menerima RTMP dan mengkonversi ke HLS (`.m3u8`) — file disimpan di `/usr/local/srs/objs/nginx/`
 3. Viewer mengakses HLS via `https://studioserver.space/live/{stream-key}.m3u8`
 4. Nginx memproxy `/live/*` ke SRS port 8080
+5. Backend mengquery SRS API (port 1985) setiap 3 detik untuk monitoring
 
 ---
 
@@ -158,10 +161,10 @@ streamhub/
 │   │       ├── index.ts         # Entry point
 │   │       ├── lib/auth.ts      # JWT middleware & helpers
 │   │       └── routes/
-│   │           ├── auth.ts      # Login, register, profile
+│   │           ├── auth.ts      # Login, register, profile, users
 │   │           ├── auth-google.ts  # Google OAuth
-│   │           ├── channels.ts  # Channel CRUD
-│   │           ├── streams.ts   # SRS stream monitoring
+│   │           ├── channels.ts  # Channel CRUD + public endpoint
+│   │           ├── streams.ts   # SRS stream monitoring + grace cache
 │   │           ├── billing.ts   # Plans, invoices, subscriptions
 │   │           └── server.ts    # OS/server stats
 │   └── web/                     # React frontend
@@ -170,12 +173,12 @@ streamhub/
 │           ├── hooks/use-auth.tsx  # Auth context
 │           ├── components/layout.tsx  # Sidebar layout
 │           └── pages/
-│               ├── login.tsx    # Login + Register
+│               ├── login.tsx    # Login + Register tab
 │               ├── dashboard.tsx
-│               ├── channels.tsx
-│               ├── streams.tsx
-│               ├── server.tsx
-│               ├── profile.tsx
+│               ├── channels.tsx # Channel cards + OBS setup
+│               ├── streams.tsx  # Live stream monitoring (3s poll)
+│               ├── server.tsx   # Server monitor
+│               ├── profile.tsx  # Edit profil & ganti password
 │               ├── public-player.tsx
 │               ├── embed-player.tsx
 │               └── billing/
@@ -194,10 +197,12 @@ streamhub/
 ├── docker/
 │   ├── docker-compose.yml       # Orchestrasi semua service
 │   ├── nginx.conf               # Reverse proxy config
-│   ├── srs.conf                 # SRS media server config
+│   ├── srs.conf                 # SRS media server config (HLS path diset eksplisit)
 │   ├── Dockerfile.backend       # Build image backend
 │   ├── Dockerfile.frontend      # Build image frontend (Nginx)
 │   └── .env.example             # Template environment variables
+├── docs/
+│   └── DOKUMENTASI.md          # Dokumentasi ini
 └── scripts/
     └── src/seed.ts              # Seed database (akun default)
 ```
@@ -268,8 +273,8 @@ Buat dua record di Cloudflare dashboard:
 
 | Type | Name | Content | Proxy |
 |---|---|---|---|
-| `A` | `studioserver.space` | `31.97.51.250` | ✅ Proxied (orange cloud) |
-| `A` | `stream` | `31.97.51.250` | ⬜ DNS Only (grey cloud) |
+| `A` | `studioserver.space` | `31.97.51.250` | Proxied (orange cloud) |
+| `A` | `stream` | `31.97.51.250` | DNS Only (grey cloud) |
 
 > **PENTING:** Record `stream.studioserver.space` HARUS DNS-Only (grey cloud), bukan proxied. Cloudflare memblokir port 1935 (RTMP).
 
@@ -314,7 +319,7 @@ nano docker/.env
 # Install certbot
 apt install certbot -y
 
-# Stop semua service yang pakai port 80 dulu
+# Stop semua service yang pakai port 80 dulu (jika ada)
 # Minta sertifikat
 certbot certonly --standalone -d studioserver.space -d www.studioserver.space
 
@@ -353,25 +358,27 @@ seed().then(() => process.exit(0)).catch(console.error);
 "
 ```
 
-> Atau jalankan migration + seed via script jika tersedia:
-> ```bash
-> docker compose exec backend sh -c "node dist/index.js migrate && node dist/index.js seed"
-> ```
-
-### Update Aplikasi
-
-Setiap ada perubahan kode, update VPS dengan cara:
+### Update Aplikasi (setelah ada perubahan kode)
 
 ```bash
 cd /root/streamhub
-git pull
 
+# Pastikan kode VPS sama persis dengan GitHub (paling aman)
+git fetch origin
+git reset --hard origin/main
+
+# Rebuild dengan --no-cache agar perubahan terbaru terambil
 cd docker
-docker compose build backend frontend
+docker compose build --no-cache backend frontend
+
+# Restart service yang direbuild
 docker compose up -d backend frontend
+
+# Cek status
+docker compose ps
 ```
 
-Jika git pull "Already up to date" tapi ada perubahan baru, update file langsung via heredoc (lihat panduan di chat history).
+> **Catatan:** Selalu gunakan `git reset --hard origin/main` (bukan hanya `git pull`) jika ada kemungkinan file di VPS sudah dimodifikasi secara lokal. Gunakan `--no-cache` pada `docker compose build` jika ada kecurigaan Docker menggunakan cache lama.
 
 ### Perpanjang SSL Otomatis
 
@@ -401,6 +408,9 @@ crontab -e
 
 5. Klik **OK**, lalu klik **Start Streaming**
 
+> **PENTING — Stream Key harus cocok dengan database.**  
+> Jika Anda pernah menekan tombol **Regenerate** di dashboard, stream key lama tidak berlaku lagi. Salin ulang stream key terbaru dari halaman Channels dan perbarui di OBS.
+
 > **Kenapa pakai `stream.studioserver.space`?**  
 > Karena subdomain ini dikonfigurasi sebagai DNS-Only di Cloudflare (grey cloud), sehingga traffic RTMP port 1935 bisa langsung mencapai VPS. Jika pakai domain utama yang diproxy Cloudflare, port 1935 akan diblokir.
 
@@ -409,7 +419,7 @@ crontab -e
 **Settings → Output → Streaming:**
 - Encoder: `x264` atau hardware (NVENC/AMF jika ada GPU)
 - Bitrate: `2500–4000 Kbps` (sesuaikan dengan kecepatan upload)
-- Keyframe Interval: `2` detik (WAJIB untuk HLS)
+- Keyframe Interval: `2` detik (**WAJIB** untuk HLS agar playlist terbaca benar)
 - CPU Usage Preset: `veryfast` atau `superfast`
 
 **Settings → Video:**
@@ -492,11 +502,12 @@ Bisa dibuka langsung di browser atau di-embed di mana saja.
 
 ### Regenerate Stream Key
 
-Klik tombol **Regenerate** di samping field Stream Key. Key lama langsung tidak berlaku, OBS harus diupdate dengan key baru.
+Klik tombol **Regenerate** di samping field Stream Key. Key lama langsung tidak berlaku.  
+**Wajib perbarui Stream Key di OBS/vMix dengan key baru setelah regenerate.**
 
 ### Aktif / Non-aktif Channel
 
-Edit channel (klik ikon gear ⚙️) dan centang/hapus centang **Channel Active**.
+Edit channel (klik ikon gear) dan centang/hapus centang **Channel Active**.
 
 ---
 
@@ -542,7 +553,7 @@ Halaman **Subscriptions** mengelola data langganan aktif:
   UPDATE users SET role = 'operator' WHERE email = 'user@example.com';
   ```
 - Login Google OAuth juga mendapat role **user** secara default
-- Akun Google OAuth tidak bisa ganti password lewat UI (tidak ada password)
+- Akun Google OAuth tidak bisa ganti password lewat UI (tidak ada password hash)
 
 ---
 
@@ -557,49 +568,51 @@ Authorization: Bearer {token}
 
 | Method | Endpoint | Auth | Keterangan |
 |---|---|---|---|
-| `POST` | `/api/auth/login` | ❌ | Login dengan email + password |
-| `POST` | `/api/auth/register` | ❌ | Daftar akun baru (role: user) |
-| `GET` | `/api/auth/me` | ✅ | Info user yang sedang login |
-| `PUT` | `/api/auth/profile` | ✅ | Update nama / ganti password |
-| `GET` | `/api/auth/google` | ❌ | Mulai flow Google OAuth |
-| `GET` | `/api/auth/google/callback` | ❌ | Callback Google OAuth |
-| `GET` | `/api/users` | ✅ Admin | Daftar semua user |
+| `POST` | `/api/auth/login` | Tidak | Login dengan email + password |
+| `POST` | `/api/auth/register` | Tidak | Daftar akun baru (role: user) |
+| `GET` | `/api/auth/me` | JWT | Info user yang sedang login |
+| `PUT` | `/api/auth/profile` | JWT | Update nama / ganti password |
+| `GET` | `/api/auth/google` | Tidak | Mulai flow Google OAuth |
+| `GET` | `/api/auth/google/callback` | Tidak | Callback Google OAuth |
+| `GET` | `/api/users` | JWT Admin | Daftar semua user |
 
 ### Channels
 
 | Method | Endpoint | Auth | Keterangan |
 |---|---|---|---|
-| `GET` | `/api/channels` | ✅ | Daftar semua channel |
-| `POST` | `/api/channels` | ✅ Admin/Op | Buat channel baru |
-| `GET` | `/api/channels/:id` | ✅ | Detail channel |
-| `PUT` | `/api/channels/:id` | ✅ Admin/Op | Update channel |
-| `DELETE` | `/api/channels/:id` | ✅ Admin | Hapus channel |
-| `POST` | `/api/channels/:id/regenerate-key` | ✅ Admin/Op | Regenerate stream key |
-| `GET` | `/api/channels/public/:id` | ❌ | Info channel publik (tanpa stream key) |
+| `GET` | `/api/channels` | JWT | Daftar semua channel |
+| `POST` | `/api/channels` | JWT Admin/Op | Buat channel baru |
+| `GET` | `/api/channels/:id` | JWT | Detail channel |
+| `PUT` | `/api/channels/:id` | JWT Admin/Op | Update channel |
+| `DELETE` | `/api/channels/:id` | JWT Admin | Hapus channel |
+| `POST` | `/api/channels/:id/regenerate-key` | JWT Admin/Op | Regenerate stream key |
+| `GET` | `/api/channels/public/:id` | Tidak | Info channel publik (tanpa stream key) |
 
 ### Streams
 
 | Method | Endpoint | Auth | Keterangan |
 |---|---|---|---|
-| `GET` | `/api/streams/active` | ✅ | Stream yang sedang live dari SRS |
-| `GET` | `/api/streams/stats` | ✅ | Statistik stream dari SRS |
+| `GET` | `/api/streams/active` | JWT | Stream yang sedang live (dengan grace cache 30 detik) |
+| `GET` | `/api/streams/clients` | JWT | Daftar client yang terkoneksi ke SRS |
+| `GET` | `/api/streams/bandwidth` | JWT | Statistik bandwidth inbound/outbound SRS |
+| `GET` | `/api/streams/stats` | JWT | Statistik gabungan: channels, viewers, revenue |
 
 ### Billing
 
 | Method | Endpoint | Auth | Keterangan |
 |---|---|---|---|
-| `GET` | `/api/billing/plans` | ✅ | Daftar paket |
-| `POST` | `/api/billing/plans` | ✅ Admin | Buat paket baru |
-| `GET` | `/api/billing/invoices` | ✅ | Daftar invoice |
-| `POST` | `/api/billing/invoices` | ✅ Admin | Buat invoice |
-| `GET` | `/api/billing/subscriptions` | ✅ | Daftar subscription |
-| `POST` | `/api/billing/subscriptions` | ✅ Admin | Buat subscription |
+| `GET` | `/api/billing/plans` | JWT | Daftar paket |
+| `POST` | `/api/billing/plans` | JWT Admin | Buat paket baru |
+| `GET` | `/api/billing/invoices` | JWT | Daftar invoice |
+| `POST` | `/api/billing/invoices` | JWT Admin | Buat invoice |
+| `GET` | `/api/billing/subscriptions` | JWT | Daftar subscription |
+| `POST` | `/api/billing/subscriptions` | JWT Admin | Buat subscription |
 
 ### Server
 
 | Method | Endpoint | Auth | Keterangan |
 |---|---|---|---|
-| `GET` | `/api/server/stats` | ✅ | Statistik CPU, RAM, network VPS |
+| `GET` | `/api/server/stats` | JWT | Statistik CPU, RAM, network VPS |
 
 ### Contoh Request Login
 
@@ -621,6 +634,18 @@ Response:
     "createdAt": "2026-03-18T00:00:00.000Z"
   }
 }
+```
+
+### Contoh Cek Stream Aktif
+
+```bash
+TOKEN=$(curl -s -X POST https://studioserver.space/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@streamhub.tv","password":"admin123"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+
+curl -s https://studioserver.space/api/streams/active \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
@@ -686,6 +711,14 @@ Response:
 | `status` | varchar(20) | `paid` / `unpaid` / `overdue` |
 | `due_date` | timestamp | Jatuh tempo |
 
+### Tabel `viewer_analytics`
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| `id` | serial PK | ID record |
+| `viewer_count` | integer | Jumlah viewer saat itu |
+| `timestamp` | timestamp | Waktu pencatatan |
+
 ---
 
 ## 15. Akun Default
@@ -704,14 +737,58 @@ Setelah seed database berjalan, akun berikut tersedia:
 
 ## 16. Troubleshooting
 
+### Live Streams / Dashboard menampilkan 0 stream padahal OBS aktif
+
+Ini adalah masalah yang paling sering terjadi. Ikuti langkah diagnosis berikut:
+
+**Langkah 1 — Verifikasi SRS menerima stream:**
+```bash
+curl -s http://127.0.0.1:1985/api/v1/streams/ | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for s in data.get('streams', []):
+    print(f'name={s[\"name\"]}  app={s[\"app\"]}  active={s.get(\"publish\",{}).get(\"active\")}')"
+```
+Jika tidak ada output → OBS belum connect ke SRS (lanjut ke troubleshooting OBS di bawah).  
+Jika ada output dengan `active=True` → lanjut ke langkah 2.
+
+**Langkah 2 — Verifikasi stream key cocok dengan database:**
+```bash
+# Lihat stream key yang dilapor SRS
+# Bandingkan dengan stream key di tabel channels
+docker compose exec postgres psql -U streamhub -d streamhub -c "SELECT id, name, stream_key FROM channels;"
+```
+Jika stream key dari SRS (`name=xxx`) BERBEDA dengan stream key di database → **stream key di OBS sudah tidak sinkron**. Salin stream key terbaru dari halaman Channels dashboard dan perbarui di OBS.
+
+**Langkah 3 — Test endpoint backend langsung:**
+```bash
+TOKEN=$(curl -s -X POST https://studioserver.space/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@streamhub.tv","password":"admin123"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+
+curl -s https://studioserver.space/api/streams/active \
+  -H "Authorization: Bearer $TOKEN"
+```
+Jika output `[]` tapi langkah 1 ada stream → rebuild backend diperlukan:
+```bash
+cd /root/streamhub
+git reset --hard origin/main
+cd docker
+docker compose build --no-cache backend
+docker compose up -d backend
+```
+
+---
+
 ### OBS tidak bisa connect RTMP
 
 **Gejala:** OBS gagal connect, error "Failed to connect to server"
 
 **Solusi:**
 1. Pastikan Server URL di OBS: `rtmp://stream.studioserver.space/live`
-2. Pastikan Stream Key sudah benar (salin dari dashboard)
-3. Cek subdomain `stream.studioserver.space` di Cloudflare: **HARUS DNS-Only** (grey cloud), bukan proxied
+2. Pastikan Stream Key sudah benar — salin ulang dari dashboard Channels
+3. Cek subdomain `stream.studioserver.space` di Cloudflare: **HARUS DNS-Only** (grey cloud)
 4. Cek port 1935 terbuka di VPS:
    ```bash
    # Dari komputer lokal
@@ -724,6 +801,39 @@ Setelah seed database berjalan, akun berikut tersedia:
    docker ps | grep srs
    docker logs docker-srs-1 --tail=20
    ```
+
+---
+
+### HLS tidak mau play / Player offline padahal OBS streaming
+
+```bash
+# Cek SRS menerima stream
+curl http://127.0.0.1:1985/api/v1/streams/
+
+# Cek file HLS tersedia di volume SRS
+docker exec docker-srs-1 ls /usr/local/srs/objs/nginx/live/
+
+# Cek Nginx proxy ke SRS berhasil
+curl -I https://studioserver.space/live/{stream-key}.m3u8
+```
+
+Jika SRS berjalan tapi file HLS kosong, pastikan `srs.conf` memiliki konfigurasi ini:
+```conf
+hls {
+    enabled     on;
+    hls_path    ./objs/nginx;
+    hls_fragment 2;
+    hls_window  10;
+    hls_cleanup on;
+    hls_dispose 30;
+}
+```
+Lalu restart SRS:
+```bash
+docker compose restart srs
+```
+
+---
 
 ### Website tidak bisa diakses / HTTPS error
 
@@ -739,18 +849,7 @@ certbot certificates
 docker exec docker-nginx-1 nginx -s reload
 ```
 
-### HLS tidak mau play / Stream offline padahal OBS streaming
-
-```bash
-# Cek SRS menerima stream
-curl http://127.0.0.1:1985/api/v1/streams/
-
-# Cek file HLS tersedia
-ls /var/lib/docker/volumes/docker_srs_data/_data/live/
-
-# Cek Nginx proxy ke SRS
-curl https://studioserver.space/live/{stream-key}.m3u8
-```
+---
 
 ### Backend / API error 500
 
@@ -766,6 +865,8 @@ p.query('SELECT 1').then(() => console.log('DB OK')).catch(console.error);
 "
 ```
 
+---
+
 ### Container tidak mau jalan / restart loop
 
 ```bash
@@ -780,9 +881,11 @@ docker compose logs postgres --tail=50
 docker compose down && docker compose up -d
 ```
 
+---
+
 ### Google OAuth tidak berfungsi
 
-1. Pastikan `GOOGLE_CLIENT_ID` dan `GOOGLE_CLIENT_SECRET` sudah di-set di `.env`
+1. Pastikan `GOOGLE_CLIENT_ID` dan `GOOGLE_CLIENT_SECRET` sudah di-set di `docker/.env`
 2. Pastikan Authorized Redirect URI di Google Cloud Console:
    ```
    https://studioserver.space/api/auth/google/callback
@@ -793,21 +896,25 @@ docker compose down && docker compose up -d
    ```
 4. Rebuild backend setelah update `.env`:
    ```bash
-   docker compose build backend && docker compose up -d backend
+   docker compose build --no-cache backend && docker compose up -d backend
    ```
 
-### Update file tanpa git push (jika git pull tidak sync)
+---
+
+### File di VPS tidak sinkron dengan GitHub
+
+Jika `git pull` gagal atau ada file yang dimodifikasi lokal:
 
 ```bash
-# Update file spesifik langsung di VPS via heredoc
-cat > /root/streamhub/path/ke/file.ts << 'EOF'
-# isi file baru di sini
-EOF
+cd /root/streamhub
 
-# Rebuild service yang berubah
-cd /root/streamhub/docker
-docker compose build backend   # jika backend berubah
-docker compose build frontend  # jika frontend berubah
+# Reset total ke versi GitHub (semua perubahan lokal hilang)
+git fetch origin
+git reset --hard origin/main
+
+# Rebuild service
+cd docker
+docker compose build --no-cache backend frontend
 docker compose up -d
 ```
 
