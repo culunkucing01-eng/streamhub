@@ -8,13 +8,37 @@ const router: IRouter = Router();
 
 const SRS_API_URL = process.env.SRS_API_URL || process.env.SRS_URL || "https://stream.domain.com";
 
+interface ActiveStreamPayload {
+  id: string;
+  name: string;
+  channelName: string;
+  clientId: string;
+  vhost: string;
+  app: string;
+  stream: string;
+  bitrate: number;
+  viewers: number;
+  uptime: number;
+  isOnline: boolean;
+  videoCodec: string;
+  audioCodec: string;
+  width: number;
+  height: number;
+}
+
+// 30-second grace cache so brief OBS dropouts don't blank the admin page
+const streamCache = new Map<string, { data: ActiveStreamPayload; lastSeen: number }>();
+const CACHE_TTL_MS = 30_000;
+
 interface SrsStream {
   id?: string | number;
   name?: string;
   vhost?: string;
   app?: string;
   clients?: number;
-  publish?: { cid?: string | number; active?: number };
+  frames?: number;
+  live_ms?: number;
+  publish?: { cid?: string | number; active?: boolean | number };
   kbps?: { recv_30s?: number; send_30s?: number };
   video?: { codec?: string; width?: number; height?: number };
   audio?: { codec?: string };
@@ -60,14 +84,13 @@ router.get("/streams/active", authMiddleware, async (_req, res) => {
     const channels = await db.select().from(channelsTable);
     const channelMap = new Map(channels.map((c) => [c.streamKey, c]));
 
+    const now = Date.now();
+
     if (srsData && srsData.streams) {
-      // Deduplicate by stream name (keep highest bitrate entry per key)
+      // Deduplicate by stream key — keep entry with highest recv bitrate
       const bestByKey = new Map<string, SrsStream>();
       for (const s of srsData.streams) {
         const key = s.name || "";
-        // Only consider streams that:
-        // 1. Match a known channel stream key in our database
-        // 2. Have an active publisher (someone is actually pushing RTMP right now)
         if (!channelMap.has(key)) continue;
         if (!s.publish?.active) continue;
 
@@ -79,36 +102,56 @@ router.get("/streams/active", authMiddleware, async (_req, res) => {
         }
       }
 
-      const activeStreams = Array.from(bestByKey.values()).map((s) => {
-        const streamName = s.name || "";
-        const channel = channelMap.get(streamName)!;
-        // SRS counts the publisher itself as a client, so subtract 1 for real viewers
+      // Build and cache fresh active streams
+      for (const [key, s] of bestByKey.entries()) {
+        const channel = channelMap.get(key)!;
         const rawClients = s.clients || 0;
         const viewers = Math.max(0, rawClients - 1);
-        return {
+        // Approximate uptime: frames at 30 fps, or fall back to live_ms delta
+        const uptimeSec = s.frames
+          ? Math.floor(s.frames / 30)
+          : s.live_ms
+          ? Math.max(0, Math.floor((now - s.live_ms) / 1000))
+          : 0;
+
+        const payload: ActiveStreamPayload = {
           id: String(s.id || ""),
-          name: streamName,
+          name: key,
           channelName: channel.name,
           clientId: String(s.publish?.cid || ""),
           vhost: s.vhost || "",
           app: s.app || "live",
-          stream: streamName,
+          stream: key,
           bitrate: (s.kbps?.recv_30s || 0) * 1000,
           viewers,
-          uptime: s.publish?.active || 0,
+          uptime: uptimeSec,
           isOnline: true,
           videoCodec: s.video?.codec || "",
           audioCodec: s.audio?.codec || "",
           width: s.video?.width || 0,
           height: s.video?.height || 0,
         };
-      });
-
-      res.json(activeStreams);
-    } else {
-      // SRS unreachable — return empty list (don't fabricate data)
-      res.json([]);
+        streamCache.set(key, { data: payload, lastSeen: now });
+      }
     }
+
+    // Purge entries older than TTL
+    for (const [key, entry] of streamCache.entries()) {
+      if (now - entry.lastSeen > CACHE_TTL_MS) streamCache.delete(key);
+    }
+
+    // Return live streams from cache (still within TTL window)
+    // Mark cached-but-no-longer-live streams with isOnline=false
+    const liveKeys = srsData?.streams
+      ?.filter((s) => channelMap.has(s.name || "") && s.publish?.active)
+      .map((s) => s.name || "") ?? [];
+
+    const result = Array.from(streamCache.values()).map(({ data, lastSeen }) => ({
+      ...data,
+      isOnline: liveKeys.includes(data.stream) || (now - lastSeen < 5_000),
+    }));
+
+    res.json(result);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch streams";
     res.status(500).json({ error: message });
@@ -177,14 +220,11 @@ router.get("/streams/stats", authMiddleware, async (_req, res) => {
 
     const srsData = await fetchSRS<SrsStreamsResponse>("/api/v1/streams/");
     if (srsData && srsData.streams) {
-      // Only count known channels with active publishers (same logic as /streams/active)
       const knownActive = srsData.streams.filter(
         (s) => channelMap.has(s.name || "") && s.publish?.active
       );
-      // Deduplicate by stream name
       const uniqueKeys = new Set(knownActive.map((s) => s.name || ""));
       activeStreams = uniqueKeys.size;
-      // Viewers: subtract 1 per stream for the publisher
       totalViewers = knownActive.reduce((acc: number, s) => acc + Math.max(0, (s.clients || 0) - 1), 0);
     }
 

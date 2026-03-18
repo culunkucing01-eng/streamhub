@@ -11,7 +11,7 @@ export default function Streams() {
   const { data: streams, isLoading } = useGetActiveStreams({
     query: {
       queryKey: ["/api/streams/active"],
-      refetchInterval: 10000,
+      refetchInterval: 3000,
     }
   });
 
