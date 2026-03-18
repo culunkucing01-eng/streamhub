@@ -16,6 +16,20 @@ services:
       timeout: 5s
       retries: 5
 
+  srs:
+    image: ossrs/srs:5
+    restart: always
+    ports:
+      - "1935:1935"
+      - "127.0.0.1:1985:1985"
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./srs.conf:/usr/local/srs/conf/srs.conf:ro
+      - srs_data:/usr/local/srs/objs
+    environment:
+      CANDIDATE: ${DOMAIN:-studioserver.space}
+
   backend:
     build:
       context: ..
@@ -28,8 +42,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-streamhub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-streamhub}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
-      SRS_API_URL: ${SRS_API_URL:-http://localhost:1985}
-      SRS_PLAYBACK_URL: ${SRS_PLAYBACK_URL:-http://localhost:8080}
+      SRS_API_URL: http://localhost:1985
+      SRS_PLAYBACK_URL: https://${DOMAIN:-studioserver.space}
       APP_DOMAIN: ${DOMAIN:-studioserver.space}
       FRONTEND_URL: https://${DOMAIN:-studioserver.space}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -38,6 +52,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      srs:
+        condition: service_started
 
   frontend:
     build:
@@ -60,6 +76,8 @@ services:
     depends_on:
       - frontend
       - backend
+      - srs
 
 volumes:
   postgres_data:
+  srs_data:
