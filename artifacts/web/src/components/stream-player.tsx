@@ -93,7 +93,8 @@ export function StreamPlayer({
   const [mode, setMode] = useState<Mode>("idle");
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(autoplay);
-  const [showUnmuteHint, setShowUnmuteHint] = useState(false);
+
+  const showUnmuteOverlay = isMuted && (mode === "webrtc" || mode === "hls");
 
   const cleanup = useCallback(() => {
     abortRef.current?.abort();
@@ -109,16 +110,10 @@ export function StreamPlayer({
     }
   }, []);
 
-  const handleVideoPlaying = useCallback(() => {
-    setIsPlaying(true);
-    setShowUnmuteHint(true);
-  }, []);
-
   const unmute = useCallback(() => {
     if (!videoRef.current) return;
     videoRef.current.muted = false;
     setIsMuted(false);
-    setShowUnmuteHint(false);
   }, []);
 
   const startHls = useCallback((url: string) => {
@@ -169,6 +164,8 @@ export function StreamPlayer({
     const video = videoRef.current;
     if (!video) return;
 
+    setMode("webrtc");
+
     const ac = new AbortController();
     abortRef.current = ac;
 
@@ -176,7 +173,6 @@ export function StreamPlayer({
       const pc = await startWhep(video, url, ac.signal);
       if (ac.signal.aborted) { pc.close(); return; }
       pcRef.current = pc;
-      setMode("webrtc");
 
       video.onloadedmetadata = () => {
         if (autoplay) video.play().catch(() => setIsPlaying(false));
@@ -205,8 +201,8 @@ export function StreamPlayer({
 
   useEffect(() => {
     cleanup();
-    setShowUnmuteHint(false);
     setIsMuted(true);
+    setIsPlaying(autoplay);
 
     if (webrtcUrl) {
       startWebRtc(webrtcUrl);
@@ -217,7 +213,7 @@ export function StreamPlayer({
     }
 
     return cleanup;
-  }, [webrtcUrl, hlsUrl, cleanup, startWebRtc, startHls]);
+  }, [webrtcUrl, hlsUrl, autoplay, cleanup, startWebRtc, startHls]);
 
   const togglePlay = () => {
     if (!videoRef.current) return;
@@ -231,7 +227,6 @@ export function StreamPlayer({
     const newMuted = !isMuted;
     videoRef.current.muted = newMuted;
     setIsMuted(newMuted);
-    if (!newMuted) setShowUnmuteHint(false);
   };
 
   const toggleFullscreen = () => {
@@ -260,21 +255,21 @@ export function StreamPlayer({
         muted={isMuted}
         playsInline
         className="w-full h-full object-contain"
-        onPlaying={handleVideoPlaying}
+        onPlaying={() => setIsPlaying(true)}
       />
 
-      {showUnmuteHint && isMuted && (
+      {showUnmuteOverlay && (
         <button
           onClick={unmute}
-          className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-transparent group/unmute cursor-pointer"
+          className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-transparent cursor-pointer group/unmute"
           aria-label="Aktifkan suara"
         >
-          <div className="flex flex-col items-center gap-3 px-6 py-4 rounded-2xl bg-black/60 backdrop-blur-sm border border-white/10 shadow-xl transition-transform group-hover/unmute:scale-105">
-            <div className="relative">
-              <VolumeX className="w-10 h-10 text-white" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+          <div className="flex flex-col items-center gap-3 px-6 py-4 rounded-2xl bg-black/70 backdrop-blur-sm border border-white/10 shadow-2xl transition-all duration-200 group-hover/unmute:scale-105 group-hover/unmute:bg-black/80">
+            <div className="relative flex items-center justify-center w-14 h-14 rounded-full bg-white/10">
+              <VolumeX className="w-7 h-7 text-white" />
+              <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-black animate-pulse" />
             </div>
-            <span className="text-white font-semibold text-sm text-center leading-tight">
+            <span className="text-white font-semibold text-sm text-center">
               Klik untuk aktifkan suara
             </span>
           </div>
