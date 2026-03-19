@@ -93,6 +93,7 @@ export function StreamPlayer({
   const [mode, setMode] = useState<Mode>("idle");
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(autoplay);
+  const [showUnmuteHint, setShowUnmuteHint] = useState(false);
 
   const cleanup = useCallback(() => {
     abortRef.current?.abort();
@@ -106,6 +107,18 @@ export function StreamPlayer({
       videoRef.current.src = "";
       videoRef.current.load();
     }
+  }, []);
+
+  const handleVideoPlaying = useCallback(() => {
+    setIsPlaying(true);
+    setShowUnmuteHint(true);
+  }, []);
+
+  const unmute = useCallback(() => {
+    if (!videoRef.current) return;
+    videoRef.current.muted = false;
+    setIsMuted(false);
+    setShowUnmuteHint(false);
   }, []);
 
   const startHls = useCallback((url: string) => {
@@ -192,6 +205,8 @@ export function StreamPlayer({
 
   useEffect(() => {
     cleanup();
+    setShowUnmuteHint(false);
+    setIsMuted(true);
 
     if (webrtcUrl) {
       startWebRtc(webrtcUrl);
@@ -213,8 +228,10 @@ export function StreamPlayer({
 
   const toggleMute = () => {
     if (!videoRef.current) return;
-    videoRef.current.muted = !isMuted;
-    setIsMuted(!isMuted);
+    const newMuted = !isMuted;
+    videoRef.current.muted = newMuted;
+    setIsMuted(newMuted);
+    if (!newMuted) setShowUnmuteHint(false);
   };
 
   const toggleFullscreen = () => {
@@ -243,9 +260,28 @@ export function StreamPlayer({
         muted={isMuted}
         playsInline
         className="w-full h-full object-contain"
+        onPlaying={handleVideoPlaying}
       />
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+      {showUnmuteHint && isMuted && (
+        <button
+          onClick={unmute}
+          className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-transparent group/unmute cursor-pointer"
+          aria-label="Aktifkan suara"
+        >
+          <div className="flex flex-col items-center gap-3 px-6 py-4 rounded-2xl bg-black/60 backdrop-blur-sm border border-white/10 shadow-xl transition-transform group-hover/unmute:scale-105">
+            <div className="relative">
+              <VolumeX className="w-10 h-10 text-white" />
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+            </div>
+            <span className="text-white font-semibold text-sm text-center leading-tight">
+              Klik untuk aktifkan suara
+            </span>
+          </div>
+        </button>
+      )}
+
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 z-10">
         <div className="flex items-center gap-4 text-white">
           <button onClick={togglePlay} className="p-2 hover:bg-white/20 rounded-full transition-colors">
             {isPlaying
@@ -254,7 +290,7 @@ export function StreamPlayer({
           </button>
 
           <button onClick={toggleMute} className="p-2 hover:bg-white/20 rounded-full transition-colors">
-            {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            {isMuted ? <VolumeX className="w-5 h-5 text-yellow-400" /> : <Volume2 className="w-5 h-5" />}
           </button>
 
           <div className="flex-1" />
