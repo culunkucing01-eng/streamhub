@@ -4,22 +4,40 @@ import type { Channel } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Settings, Copy, Trash2, KeyRound, ExternalLink, Loader2, RefreshCw, Tv, CheckCheck, Radio, Code2 } from "lucide-react";
+import { Plus, Settings, Copy, Trash2, KeyRound, ExternalLink, Loader2, RefreshCw, Tv, CheckCheck, Radio, Code2, AlertTriangle, PauseCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
-
 export default function Channels() {
   const queryClient = useQueryClient();
   const { data: channels, isLoading } = useListChannels();
-  
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editChannel, setEditChannel] = useState<Channel | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  
+  const [suspendingId, setSuspendingId] = useState<number | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
   const createMutation = useCreateChannel({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/channels'] }); setIsCreateOpen(false); } } });
   const updateMutation = useUpdateChannel({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/channels'] }); setEditChannel(null); } } });
   const deleteMutation = useDeleteChannel({ mutation: { onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/channels'] }) } });
   const regenMutation = useRegenerateStreamKey({ mutation: { onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/channels'] }) } });
+
+  const handleSuspendToggle = async (channel: Channel & { isSuspended?: boolean }) => {
+    setSuspendingId(channel.id);
+    try {
+      await fetch(`/api/channels/${channel.id}/suspend`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
+        },
+        body: JSON.stringify({ suspended: !channel.isSuspended }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/channels'] });
+    } finally {
+      setSuspendingId(null);
+    }
+  };
 
   const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -31,13 +49,13 @@ export default function Channels() {
     e.preventDefault();
     if (!editChannel) return;
     const fd = new FormData(e.currentTarget);
-    updateMutation.mutate({ 
-      id: editChannel.id, 
-      data: { 
-        name: fd.get("name") as string, 
+    updateMutation.mutate({
+      id: editChannel.id,
+      data: {
+        name: fd.get("name") as string,
         description: fd.get("description") as string,
         isActive: fd.get("isActive") === "on"
-      } 
+      }
     });
   };
 
@@ -61,11 +79,40 @@ export default function Channels() {
     </button>
   );
 
+  const SuspendToggle = ({ channel }: { channel: Channel & { isSuspended?: boolean } }) => {
+    const suspended = !!channel.isSuspended;
+    const loading = suspendingId === channel.id;
+    return (
+      <div className="flex items-center gap-3">
+        <span className={cn("text-xs font-semibold uppercase tracking-wider", suspended ? "text-red-400" : "text-green-400")}>
+          {suspended ? "Public Suspended" : "Public On Air"}
+        </span>
+        <button
+          onClick={() => handleSuspendToggle(channel)}
+          disabled={loading}
+          className={cn(
+            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none",
+            suspended ? "bg-red-500" : "bg-green-500",
+            loading && "opacity-60 cursor-not-allowed"
+          )}
+          title={suspended ? "Click to resume public broadcast" : "Click to suspend public broadcast"}
+        >
+          <span
+            className={cn(
+              "inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-300",
+              suspended ? "translate-x-1" : "translate-x-6"
+            )}
+          />
+        </button>
+      </div>
+    );
+  };
+
   const ChannelModal = ({ channel, onClose }: { channel?: Channel | null, onClose: () => void }) => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }} 
-        animate={{ opacity: 1, scale: 1 }} 
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         className="glass-panel w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl"
       >
@@ -102,6 +149,32 @@ export default function Channels() {
   return (
     <Layout>
       <div className="space-y-6">
+
+        {/* Payment Reminder Banner */}
+        <AnimatePresence>
+          {!bannerDismissed && (
+            <motion.div
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="flex items-center gap-3 px-5 py-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400"
+            >
+              <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-400" />
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-sm">Payment Reminder — </span>
+                <span className="text-sm">Server payment is due in <strong>5 days</strong>. Please complete your payment to avoid service interruption.</span>
+              </div>
+              <button
+                onClick={() => setBannerDismissed(true)}
+                className="flex-shrink-0 text-amber-400/60 hover:text-amber-400 text-lg leading-none transition-colors"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Channels</h1>
@@ -117,34 +190,61 @@ export default function Channels() {
           <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {channels?.map((channel, i) => (
-              <motion.div 
+            {(channels as Array<Channel & { isSuspended?: boolean }>)?.map((channel, i) => (
+              <motion.div
                 key={channel.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="glass rounded-2xl overflow-hidden border border-border/50 group"
+                className={cn(
+                  "glass rounded-2xl overflow-hidden border group",
+                  channel.isSuspended ? "border-red-500/40" : "border-border/50"
+                )}
               >
                 <div className="p-6 border-b border-border/50 flex justify-between items-start">
-                  <div>
-                    <div className="flex items-center gap-3 mb-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1 flex-wrap">
                       <h3 className="font-display font-bold text-xl">{channel.name}</h3>
                       <span className={cn("px-2 py-0.5 rounded-md text-xs font-semibold uppercase tracking-wider", channel.isActive ? "bg-green-500/20 text-green-500 border border-green-500/30" : "bg-muted text-muted-foreground")}>
                         {channel.isActive ? 'Active' : 'Inactive'}
                       </span>
+                      {channel.isSuspended && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30">
+                          <PauseCircle className="w-3 h-3" /> Suspended
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-1">{channel.description || 'No description provided'}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 ml-3">
                     <button onClick={() => setEditChannel(channel)} className="p-2 rounded-lg bg-secondary/50 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"><Settings className="w-4 h-4" /></button>
-                    <button 
-                      onClick={() => { if(confirm('Are you sure you want to delete this channel?')) deleteMutation.mutate({ id: channel.id }) }} 
+                    <button
+                      onClick={() => { if (confirm('Are you sure you want to delete this channel?')) deleteMutation.mutate({ id: channel.id }) }}
                       className="p-2 rounded-lg bg-secondary/50 text-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
+
+                {/* Suspend Toggle Row */}
+                <div className={cn(
+                  "px-6 py-3 flex items-center justify-between border-b border-border/30",
+                  channel.isSuspended ? "bg-red-500/5" : "bg-background/20"
+                )}>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <PauseCircle className="w-4 h-4" />
+                    <span>Public Broadcast Control</span>
+                  </div>
+                  <SuspendToggle channel={channel} />
+                </div>
+
+                {channel.isSuspended && (
+                  <div className="px-6 py-2.5 bg-red-500/10 border-b border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    Public broadcast is suspended. vMix/OBS continues streaming but viewers see a hold screen.
+                  </div>
+                )}
 
                 <div className="p-6 bg-background/30 space-y-5">
 

@@ -29,6 +29,7 @@ interface ChannelRow {
   description: string | null;
   streamKey: string;
   isActive: boolean;
+  isSuspended: boolean;
   createdById: number;
   createdAt: Date;
   updatedAt: Date;
@@ -45,6 +46,7 @@ function buildChannelResponse(channel: ChannelRow) {
     mp4Url: `${SRS_PLAYBACK_URL}/live/${channel.streamKey}.mp4`,
     webrtcUrl: `${SRS_PLAYBACK_URL}/rtc/v1/whep/?app=live&stream=${channel.streamKey}`,
     isActive: channel.isActive,
+    isSuspended: channel.isSuspended,
     createdById: channel.createdById,
     createdAt: channel.createdAt.toISOString(),
     updatedAt: channel.updatedAt.toISOString(),
@@ -97,6 +99,7 @@ router.get("/channels/public/:id", async (req, res) => {
       name: full.name,
       description: full.description,
       isActive: full.isActive,
+      isSuspended: full.isSuspended,
       hlsUrl: full.hlsUrl,
       mp4Url: full.mp4Url,
       webrtcUrl: full.webrtcUrl,
@@ -154,6 +157,33 @@ router.put("/channels/:id", authMiddleware, requireRole("admin", "operator"), as
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to update channel";
     res.status(400).json({ error: message });
+  }
+});
+
+router.patch("/channels/:id/suspend", authMiddleware, requireRole("admin", "operator"), async (req, res) => {
+  try {
+    const { id } = GetChannelParams.parse({ id: req.params.id });
+    const { suspended } = req.body as { suspended: boolean };
+
+    if (typeof suspended !== "boolean") {
+      res.status(400).json({ error: "suspended must be a boolean" });
+      return;
+    }
+
+    const [channel] = await db
+      .update(channelsTable)
+      .set({ isSuspended: suspended, updatedAt: new Date() })
+      .where(eq(channelsTable.id, id))
+      .returning();
+
+    if (!channel) {
+      res.status(404).json({ error: "Channel not found" });
+      return;
+    }
+    res.json(buildChannelResponse(channel));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update suspension";
+    res.status(500).json({ error: message });
   }
 });
 

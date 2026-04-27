@@ -1,12 +1,14 @@
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { StreamPlayer } from "@/components/stream-player";
+import { PauseCircle } from "lucide-react";
 
 interface PublicChannel {
   id: number;
   name: string;
   description: string;
   isActive: boolean;
+  isSuspended: boolean;
   hlsUrl: string;
   mp4Url: string;
   webrtcUrl?: string;
@@ -25,7 +27,7 @@ export default function EmbedPlayer() {
     },
     retry: false,
     enabled: id > 0,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   if (isLoading) {
@@ -40,6 +42,20 @@ export default function EmbedPlayer() {
     return (
       <div className="w-full h-full min-h-screen bg-black flex items-center justify-center text-white text-sm">
         Channel not found
+      </div>
+    );
+  }
+
+  if (channel.isSuspended) {
+    return (
+      <div className="w-full h-full min-h-screen bg-zinc-900 flex flex-col items-center justify-center gap-4 p-6">
+        <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+          <PauseCircle className="w-8 h-8 text-amber-400" />
+        </div>
+        <div className="text-center">
+          <p className="text-white font-semibold text-base">Broadcast Temporarily On Hold</p>
+          <p className="text-white/40 text-sm mt-1">Please check back later.</p>
+        </div>
       </div>
     );
   }

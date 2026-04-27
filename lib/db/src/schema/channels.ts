@@ -9,6 +9,7 @@ export const channelsTable = pgTable("channels", {
   description: text("description"),
   streamKey: varchar("stream_key", { length: 255 }).notNull().unique(),
   isActive: boolean("is_active").notNull().default(true),
+  isSuspended: boolean("is_suspended").notNull().default(false),
   createdById: integer("created_by_id").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

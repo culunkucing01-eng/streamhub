@@ -1,7 +1,7 @@
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { StreamPlayer } from "@/components/stream-player";
-import { Tv, AlertCircle } from "lucide-react";
+import { Tv, AlertCircle, PauseCircle } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface PublicChannel {
@@ -9,6 +9,7 @@ interface PublicChannel {
   name: string;
   description: string;
   isActive: boolean;
+  isSuspended: boolean;
   hlsUrl: string;
   mp4Url: string;
   webrtcUrl?: string;
@@ -28,6 +29,7 @@ export default function PublicPlayer() {
     },
     retry: false,
     enabled: id > 0,
+    refetchInterval: 15000,
   });
 
   if (isLoading) {
@@ -70,7 +72,19 @@ export default function PublicPlayer() {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="w-full aspect-video bg-zinc-900 rounded-2xl overflow-hidden shadow-2xl shadow-black/50 border border-white/10"
         >
-          {channel.isActive ? (
+          {channel.isSuspended ? (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900 p-6 gap-4">
+              <div className="w-20 h-20 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                <PauseCircle className="w-10 h-10 text-amber-400" />
+              </div>
+              <div className="text-center">
+                <h2 className="text-xl font-bold text-white mb-2">Broadcast Temporarily On Hold</h2>
+                <p className="text-gray-400 text-sm max-w-sm">
+                  This channel's public broadcast has been temporarily suspended. Please check back later.
+                </p>
+              </div>
+            </div>
+          ) : channel.isActive ? (
             <StreamPlayer
               webrtcUrl={channel.webrtcUrl}
               hlsUrl={channel.hlsUrl}
@@ -98,12 +112,17 @@ export default function PublicPlayer() {
             <p className="text-gray-400 mt-1">{channel.description}</p>
           </div>
 
-          {channel.isActive && (
+          {channel.isSuspended ? (
+            <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-full self-start">
+              <PauseCircle className="w-4 h-4 text-amber-400" />
+              <span className="text-amber-400 font-semibold text-sm uppercase tracking-wider">On Hold</span>
+            </div>
+          ) : channel.isActive ? (
             <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-full self-start">
               <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
               <span className="text-red-500 font-semibold text-sm uppercase tracking-wider">Live Broadcast</span>
             </div>
-          )}
+          ) : null}
         </motion.div>
       </main>
     </div>
